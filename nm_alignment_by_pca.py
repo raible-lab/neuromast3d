@@ -33,18 +33,17 @@ project_dir = '/home/maddy/projects/claudin_gfp_5dpf_airy_live/'
 img_id = '20200617_1-O1'
 
 # Read in raw and segmented images
-raw_reader = AICSImage(f'{project_dir}/label_images/{img_id}_rawlabels.tiff')
-raw_img0 = raw_reader.get_image_data('ZYX', S=0, T=0, C=0)
+raw_reader = AICSImage(f'{project_dir}/stack_aligned/{img_id}.tiff')
+raw_img = raw_reader.get_image_data('ZYX', S=0, T=0, C=0)
 
-seg_reader = AICSImage(f'{project_dir}/stack_aligned/{img_id}.tiff')
-seg_img0 = seg_reader.get_image_data('ZYX', S=0, T=0, C=0)
+seg_reader = AICSImage(f'{project_dir}/label_images/{img_id}_rawlabels.tiff')
+seg_img = seg_reader.get_image_data('ZYX', S=0, T=0, C=0)
 
 # Interpolate along z to create isotropic voxel dimensions
 # (same as preparing single cells for cvapipe_analysis)
 
-"""
 raw_img = resize(
-        raw_img0,
+        raw_img,
         (
             PixelScaleZ / standard_res_qcb,
             PixelScaleY / standard_res_qcb,
@@ -52,10 +51,9 @@ raw_img = resize(
         ),
         method='bilinear'
     ).astype(np.uint16)
-"""
 
 seg_img = resize(
-        seg_img0,
+        seg_img,
         (
             PixelScaleZ / standard_res_qcb,
             PixelScaleY / standard_res_qcb,
@@ -63,7 +61,6 @@ seg_img = resize(
         ),
         method='bilinear'
     ).astype(np.uint16)
-
 
 # Fix segmentation so background label is 0
 # This assumes the largest connected component is the background
@@ -79,7 +76,7 @@ nm = nm*255
 nm = binary_closing(nm, ball(5))
 
 # Use PCA to find major axis of 3D binary mask
-pca = PCA(n_components=2)
+pca = PCA(n_components=3)
 nm_vals = nm.reshape(1, *nm.shape)
 z, y, x = np.nonzero(nm)
 xyz = np.hstack([x.reshape(-1, 1), y.reshape(-1, 1), z.reshape(-1, 1)])
