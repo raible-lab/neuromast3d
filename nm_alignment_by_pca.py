@@ -41,7 +41,7 @@ seg_img = seg_reader.get_image_data('ZYX', S=0, T=0, C=0)
 
 # Interpolate along z to create isotropic voxel dimensions
 # (same as preparing single cells for cvapipe_analysis)
-
+"""
 raw_img = resize(
         raw_img,
         (
@@ -61,7 +61,7 @@ seg_img = resize(
         ),
         method='bilinear'
     ).astype(np.uint16)
-
+"""
 # Fix segmentation so background label is 0
 # This assumes the largest connected component is the background
 lcc = get_largest_cc(seg_img)
@@ -84,7 +84,8 @@ pca = pca.fit(xyz)
 eigenvecs = pca.components_
 
 # Scale up the eigenvecs for visualization
-vector_endpoints = np.array(eigenvecs)*100
+vector_endpoints = np.array(eigenvecs)
+vector_endpoints = vector_endpoints*100  # scale up for visualization
 nm_centroid = np.array(center_of_mass(nm))
 
 num_dims = eigenvecs.shape[1]
@@ -94,3 +95,7 @@ assert vector_startpoints.shape == vector_endpoints.shape
 
 major_axes = np.stack((vector_startpoints, vector_endpoints), axis=1)
 print(major_axes)
+
+# Arrange vectors in (N, 2, D) format to display in napari
+vectors = np.stack((vector_startpoints, vector_endpoints), axis=1)
+print(vectors.shape)
