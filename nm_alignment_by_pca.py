@@ -60,15 +60,16 @@ def prepare_vector_for_napari(vector, origin, scale=1):
 def find_major_axis_by_pca(image, threed=False):
     if threed:
         pca = PCA(n_components=3)
-        nm = nm.reshape(1, *nm.shape)
-        z, y, x = np.nonzero(nm)
+        # image = image.reshape(1, *image.shape)
+        z, y, x = np.nonzero(image)
         xyz = np.hstack([x.reshape(-1, 1), y.reshape(-1, 1), z.reshape(-1, 1)])
         pca = pca.fit(xyz)
         eigenvecs = pca.components_
     else:
         pca = PCA(n_components=2)
-        nm = nm.reshape(1, *nm.shape)
-        z, y, x = np.nonzero(nm)
+        # image = image.reshape(1, *image.shape)
+        print(image.shape)
+        z, y, x = np.nonzero(image)
         xy = np.hstack([x.reshape(-1, 1), y.reshape(-1, 1)])
         pca = pca.fit(xy)
         eigenvecs = pca.components_
