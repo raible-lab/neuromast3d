@@ -57,6 +57,24 @@ def prepare_vector_for_napari(vector, origin, scale=1):
     return napari_vector
 
 
+def find_major_axis_by_pca(image, threed=False):
+    if threed:
+        pca = PCA(n_components=3)
+        nm = nm.reshape(1, *nm.shape)
+        z, y, x = np.nonzero(nm)
+        xyz = np.hstack([x.reshape(-1, 1), y.reshape(-1, 1), z.reshape(-1, 1)])
+        pca = pca.fit(xyz)
+        eigenvecs = pca.components_
+    else:
+        pca = PCA(n_components=2)
+        nm = nm.reshape(1, *nm.shape)
+        z, y, x = np.nonzero(nm)
+        xy = np.hstack([x.reshape(-1, 1), y.reshape(-1, 1)])
+        pca = pca.fit(xy)
+        eigenvecs = pca.components_
+    return eigenvecs
+
+
 project_dir = '/home/maddy/projects/claudin_gfp_5dpf_airy_live/'
 img_id = '20200617_1-O1'
 
@@ -104,12 +122,7 @@ nm = nm*255
 nm = binary_closing(nm, ball(5))
 
 # Use PCA to find major axis of 3D binary mask
-pca = PCA(n_components=3)
-nm_vals = nm.reshape(1, *nm.shape)
-z, y, x = np.nonzero(nm)
-xyz = np.hstack([x.reshape(-1, 1), y.reshape(-1, 1), z.reshape(-1, 1)])
-pca = pca.fit(xyz)
-eigenvecs = pca.components_
+eigenvecs = find_major_axis_by_pca(nm, threed=False)
 
 # Scale up the eigenvecs for visualization
 vector_endpoints = np.array(eigenvecs)
