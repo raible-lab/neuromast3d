@@ -125,19 +125,9 @@ nm = binary_closing(nm, ball(5))
 # Use PCA to find major axis of 3D binary mask
 eigenvecs = find_major_axis_by_pca(nm, threed=False)
 
-# Scale up the eigenvecs for visualization
-vector_endpoints = np.array(eigenvecs)
-vector_endpoints = vector_endpoints*100  # scale up for visualization
-nm_centroid = np.array(center_of_mass(nm))
-
-num_dims = eigenvecs.shape[1]
-vector_startpoints = np.tile(nm_centroid, (3, 1))
-
-assert vector_startpoints.shape == vector_endpoints.shape
-
-major_axes = np.stack((vector_startpoints, vector_endpoints), axis=1)
-print(major_axes)
-
-# Arrange vectors in (N, 2, D) format to display in napari
-vectors = np.stack((vector_startpoints, vector_endpoints), axis=1)
-print(vectors.shape)
+# Vizualize the vector
+viz_vector = prepare_vector_for_napari(
+        eigenvecs[0],
+        origin=(0, 0),
+        scale=100
+        )
