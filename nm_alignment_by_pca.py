@@ -29,6 +29,34 @@ def switch_label_values(label_image, first, second):
     return label_image
 
 
+def unit_vector(vector):
+    uvec = vector / np.linalg.norm(vector)
+    return uvec
+
+
+def angle_between(v1, v2):
+    v1_u = unit_vector(v1)
+    v2_u = unit_vector(v2)
+    angle = np.archos(np.clip(np.dot(v1_u, v2_u), -1.0, 1.0))
+    return angle
+
+
+def prepare_vector_for_napari(vector, origin, scale=1):
+    if len(vector.shape) < 2:
+        vector = np.expand_dims(vector, axis=0)
+    elif len(vector.shape) == 2:
+        vector = vector
+    else:
+        raise f'ValueError: Expected ndims == 1 or 2, \
+                but vector has ndims == {len(vector.shape)}'
+    origin = np.array(origin)
+    origin = np.reshape(origin, vector.shape)
+    vector_start = np.tile(origin, (1,))
+    vector_end = vector*scale
+    napari_vector = np.stack((vector_start, vector_end), axis=1)
+    return napari_vector
+
+
 project_dir = '/home/maddy/projects/claudin_gfp_5dpf_airy_live/'
 img_id = '20200617_1-O1'
 
