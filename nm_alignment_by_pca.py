@@ -6,6 +6,7 @@ from aicsimageprocessing import resize, resize_to
 import napari
 import numpy as np
 from skimage.morphology import binary_closing, ball
+from skimage.measure import regionprops
 from scipy.ndimage import center_of_mass
 from sklearn.decomposition import PCA
 
@@ -125,9 +126,20 @@ nm = binary_closing(nm, ball(5))
 # Use PCA to find major axis of 3D binary mask
 eigenvecs = find_major_axis_by_pca(nm, threed=False)
 
+# Find centroid of neuromast and each cell
+nm_centroid = center_of_mass(nm)
+single_cell_props = regionprops(seg_img)
+
 # Vizualize the vector
 viz_vector = prepare_vector_for_napari(
         eigenvecs[0],
-        origin=(0, 0),
+        origin=(nm_centroid[2], nm_centroid[1]),
         scale=100
         )
+
+cell_angles = []
+for cell, props in enumerate(single_cell_props):
+    cell_centroid = single_cell_props[cell]['centroid']
+    cell_centroid = np.subtract(nm_centroid, cell_centroid)
+    angle = 180.0 * np.arctan2(cell_centroid[1], cell_centroid[2]) / np.pi
+    cell_angles = np.append(cell_angles, angle)
