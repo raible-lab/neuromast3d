@@ -2,11 +2,14 @@
 # -*- coding: utf-8 -*-
 
 from aicsimageio import AICSImage
+from aicsimageio.writers import ome_tiff_writer
 from aicsimageprocessing import resize, resize_to
 import napari
 import numpy as np
+import pandas as pd
 from skimage.morphology import binary_closing, ball
 from skimage.measure import regionprops
+from skimage.transform import rotate
 from scipy.ndimage import center_of_mass
 from sklearn.decomposition import PCA
 
@@ -15,6 +18,30 @@ PixelScaleZ = 0.224
 PixelScaleX = 0.0497
 PixelScaleY = PixelScaleX
 standard_res_qcb = PixelScaleX
+
+
+def rotate_image_2d(image, angle, interpolation_order=0):
+    if image.ndim != 4:
+        raise ValueError(f'Invalid shape {image.shape} of input image.')
+
+    image = np.swapaxes(image, 1, 3)
+
+    img_aligned = []
+    for stack in image:
+        stack_aligned = rotate(
+                image=stack,
+                angle=-angle,
+                resize=True,
+                order=interpolation_order,
+                preserve_range=True
+                )
+        img_aligned.append(stack_aligned)
+    img_aligned = np.array(img_aligned)
+
+    img_aligned = np.swapaxes(img_aligned, 1, 3)
+    img_aligned = img_aligned.astype(image.dtype)
+
+    return img_aligned
 
 
 def get_largest_cc(image):
@@ -143,3 +170,22 @@ for cell, props in enumerate(single_cell_props):
     cell_centroid = np.subtract(nm_centroid, cell_centroid)
     angle = 180.0 * np.arctan2(cell_centroid[1], cell_centroid[2]) / np.pi
     cell_angles = np.append(cell_angles, angle)
+
+df = pd.read_csv(f'{project_dir}/local_staging/loaddata/manifest.csv')
+num_cells = len(cell_angles)
+df = df.iloc[:num_cells]
+
+
+def get_membrane_segmentation(path_to_seg):
+    seg_mem = AICSImage(path_to_seg).data.squeeze()
+    return seg_mem
+
+
+for row, index in enumerate(df['crop_seg']):
+    seg_cell = get_membrane_segmentation(index)
+    seg_cell = np.expand_dims(seg_cell, axis=0)
+    angle = cell_angles[row]
+    seg_rot = rotate_image_2d(seg_cell, angle, interpolation_order=0)
+    save_path = f'{project_dir}/rotation_test/{row}.ome.tif'
+    writer = ome_tiff_writer.OmeTiffWriter(save_path)
+    writer.save(seg_rot)
