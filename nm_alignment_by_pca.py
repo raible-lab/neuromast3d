@@ -104,6 +104,11 @@ def find_major_axis_by_pca(image, threed=False):
     return eigenvecs
 
 
+def get_membrane_segmentation(path_to_seg):
+    seg_mem = AICSImage(path_to_seg).data.squeeze()
+    return seg_mem
+
+
 project_dir = '/home/maddy/projects/claudin_gfp_5dpf_airy_live/'
 img_id = '20200617_1-O1'
 
@@ -171,15 +176,17 @@ for cell, props in enumerate(single_cell_props):
     angle = 180.0 * np.arctan2(cell_centroid[1], cell_centroid[2]) / np.pi
     cell_angles = np.append(cell_angles, angle)
 
+single_cell = np.where(seg_img == 1, seg_img, 0)
+single_cell = np.expand_dims(single_cell, axis=0)
+single_cell_rot = rotate_image_2d(single_cell, cell_angles[0])
+"""
+IMPORTANT NOTE: Because the background label issue was NOT corrected at the
+time of this run, the cell numbers in cell_angles and manifest.csv probably do
+not exactly match up.
+
 df = pd.read_csv(f'{project_dir}/local_staging/loaddata/manifest.csv')
 num_cells = len(cell_angles)
 df = df.iloc[:num_cells]
-
-
-def get_membrane_segmentation(path_to_seg):
-    seg_mem = AICSImage(path_to_seg).data.squeeze()
-    return seg_mem
-
 
 for row, index in enumerate(df['crop_seg']):
     seg_cell = get_membrane_segmentation(index)
@@ -187,5 +194,6 @@ for row, index in enumerate(df['crop_seg']):
     angle = cell_angles[row]
     seg_rot = rotate_image_2d(seg_cell, angle, interpolation_order=0)
     save_path = f'{project_dir}/rotation_test/{row}.ome.tif'
-    writer = ome_tiff_writer.OmeTiffWriter(save_path)
+    writer = ome_tiff_writer.OmeTiffWriter(save_path, overwrite_file=True)
     writer.save(seg_rot)
+"""
