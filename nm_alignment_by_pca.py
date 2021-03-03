@@ -75,8 +75,8 @@ def prepare_vector_for_napari(vector, origin, scale=1):
     elif len(vector.shape) == 2:
         vector = vector
     else:
-        raise f'ValueError: Expected ndims == 1 or 2, \
-                but vector has ndims == {len(vector.shape)}'
+        raise ValueError('Expected ndims == 1 or 2, \
+                        but vector has ndims == len(vector.shape)')
     origin = np.array(origin)
     origin = np.reshape(origin, vector.shape)
     vector_start = np.tile(origin, (1,))
