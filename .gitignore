@@ -1,0 +1,8 @@
+# Image and mesh files
+*.ome.tif
+*.tiff
+*.tif
+*.vtk
+
+# Recovery files for vim
+*.swp
