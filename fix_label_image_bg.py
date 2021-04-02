@@ -1,6 +1,20 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
+""" Fix label image background value
+
+This script will fix label images where the background has a non-zero value and
+an object (e.g. a cell) has the zero value instead. It assumes that the largest
+connected component in the image is the background. It will set the background
+to zero and assign the formerly-zero label with the nonzero label that belonged
+to the background.
+
+This script accepts label images where each connected component corresponding
+to an object has a unique integer value. It accepts any file extensions that
+can be read by the AICSImage reader of the aicsimageio library, such as TIFF
+and OME-TIFF.
+"""
+
 import argparse
 import glob
 import os
@@ -16,6 +30,12 @@ parser = argparse.ArgumentParser()
 parser.add_argument('source', help='source dir of images to process')
 parser.add_argument('destination', help='destination for processed images')
 parser.add_argument('extension', help='file extension to use, e.g. tiff')
+parser.add_argument(
+        '-o',
+        '--overwrite',
+        help='overwrite files in dest',
+        action='store_true'
+)
 args = parser.parse_args()
 
 input_path = args.source
@@ -39,5 +59,16 @@ for count, filename in enumerate(list_of_files):
     lcc = get_largest_cc(label_img)
     label_img = switch_label_values(label_img, 0, lcc)
     basename = os.path.basename(filename)
-    writer = ome_tiff_writer.OmeTiffWriter(f'{save_path}/{basename}')
-    writer.save(label_img, dim_order='ZYX')
+
+    if args.overwrite:
+        writer = ome_tiff_writer.OmeTiffWriter(
+                f'{save_path}/{basename}',
+                overwrite_file=True
+        )
+
+    else:
+        writer = ome_tiff_writer.OmeTiffWriter(
+                f'{save_path}/{basename}'
+        )
+
+    writer.save(label_img, dimension_order='ZYX')
