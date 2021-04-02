@@ -40,4 +40,4 @@ for count, filename in enumerate(list_of_files):
     label_img = switch_label_values(label_img, 0, lcc)
     basename = os.path.basename(filename)
     writer = ome_tiff_writer.OmeTiffWriter(f'{save_path}/{basename}')
-    writer.save(label_img)
+    writer.save(label_img, dim_order='ZYX')
