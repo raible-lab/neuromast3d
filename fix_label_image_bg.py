@@ -25,7 +25,7 @@ from aicsimageio.writers import ome_tiff_writer
 
 from utils import get_largest_cc, switch_label_values
 
-# Add command line entry points
+# Command line arguments
 parser = argparse.ArgumentParser()
 parser.add_argument('source', help='source dir of images to process')
 parser.add_argument('destination', help='destination for processed images')
@@ -42,6 +42,7 @@ input_path = args.source
 save_path = args.destination
 extension = args.extension
 
+# Check that paths passed are valid
 if not os.path.isdir(input_path):
     print('Input path does not exist')
     sys.exit()
@@ -53,6 +54,7 @@ if not os.path.isdir(save_path):
 # Find all files in source dir
 list_of_files = glob.glob(f'{input_path}/*.{extension}')
 
+# Fix  labels and save
 for count, filename in enumerate(list_of_files):
     reader = AICSImage(filename)
     label_img = reader.get_image_data('ZYX', S=0, T=0, C=0)
