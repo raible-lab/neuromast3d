@@ -29,10 +29,8 @@ parser.add_argument('raw_dir', help='directory containing raw images')
 parser.add_argument('seg_dir', help='directory containing segmented images')
 parser.add_argument('extension', help='file extension to use, e.g. tiff')
 parser.add_argument('dest', help='directory in which to save the files')
-parser.add_argument(
-        'voxel_size',
-        help='3-tuple corresponding to pixel size in X, Y, and Z respectively'
-)
+parser.add_argument('z_res', help='voxel depth')
+parser.add_argument('xy_res', help='pixel size in xy')
 parser.add_argument(
         '-o',
         '--overwrite',
@@ -46,9 +44,8 @@ raw_source_dir = args.raw_dir
 seg_source_dir = args.seg_dir
 extension = args.extension
 dest_dir = args.dest
-PixelSizeX = args.voxel_size[0]
-PixelSizeY = args.voxel_size[1]
-PixelSizeZ = args.voxel_size[2]
+z_res = args.z_res
+xy_res = args.xy_res
 
 # Check that paths are valid
 if not os.path.isdir(raw_source_dir):
