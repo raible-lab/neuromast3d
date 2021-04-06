@@ -57,32 +57,36 @@ if not os.path.isdir(seg_source_dir):
 raw_files = sorted(glob.glob(f'{raw_source_dir}/*.{extension}'))
 seg_files = sorted(glob.glob(f'{seg_source_dir}/*.{extension}'))
 
+# Some label images have different suffixes
+# If both 'raw' and 'edited' exist, we only want the 'edited' ones
+for fn in seg_files:
+    bn = os.path.basename(fn)
+    seg_img_name = bn.rpartition('_')[0]
+    if bn.rpartition('_')[2] == 'editedlabels.tiff':
+        seg_files.remove(f'{seg_source_dir}/{seg_img_name}_rawlabels.tiff')
+
 if not len(raw_files) == len(seg_files):
     print('Number of raw files does not match number of seg files.')
     sys.exit()
 
+# Create initial fov dataframe (where every row is a neuromast)
 raw_img_names = []
 for fn in raw_files:
     bn = os.path.basename(fn)
     raw_img_name = bn.split('.')[0]
-    raw_img_names = np.append(raw_img_names, raw_img_name)
+    raw_img_names.append({'NM_ID': raw_img_name, 'fov_path': fn})
 
 seg_img_names = []
 for fn in seg_files:
     bn = os.path.basename(fn)
     seg_img_name = bn.rpartition('_')[0]
+    seg_img_names.append({'NM_ID': seg_img_name, 'fov_seg_path': fn})
 
-    # Some label images have different suffixes
-    # If both 'raw' and 'edited' exist, we only want the 'edited' ones
-    if bn.rpartition('_')[2] == 'editedlabels.tiff':
-        seg_files.remove(f'{seg_source_dir}/{seg_img_name}_rawlabels.tiff')
+raw_df = pd.DataFrame(raw_img_names)
+seg_df = pd.DataFrame(seg_img_names)
+fov_dataset = raw_df(seg_df, on='NM_ID')
 
-# Create fov dataframe (where every row is a neuromast)
-fov_dataset = pd.DataFrame({'NM_ID': raw_img_names})
-fov_dataset = fov_dataset.sort_values(by=['NM_ID'], ignore_index=True)
-
-# TODO: This is where we left off last time
-# Feel like there is a better way of doing this...
+# TODO: Check that new way of making initial fov_dataset works
 
 # Create single cell dataset from nm label images
 nm_id_list = []
