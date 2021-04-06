@@ -29,8 +29,8 @@ parser.add_argument('raw_dir', help='directory containing raw images')
 parser.add_argument('seg_dir', help='directory containing segmented images')
 parser.add_argument('extension', help='file extension to use, e.g. tiff')
 parser.add_argument('dest', help='directory in which to save the files')
-parser.add_argument('z_res', help='voxel depth')
-parser.add_argument('xy_res', help='pixel size in xy')
+parser.add_argument('z_res', help='voxel depth', type=float)
+parser.add_argument('xy_res', help='pixel size in xy', type=float)
 parser.add_argument(
         '-o',
         '--overwrite',
@@ -96,7 +96,7 @@ for fn in seg_files:
 
 raw_df = pd.DataFrame(raw_img_names)
 seg_df = pd.DataFrame(seg_img_names)
-fov_dataset = raw_df(seg_df, on='NM_ID')
+fov_dataset = raw_df.merge(seg_df, on='NM_ID')
 fov_dataset.to_csv(f'{dest_dir}/fov_dataset.csv')
 
 # TODO: Check that new way of making initial fov_dataset works
@@ -141,7 +141,7 @@ for row in fov_dataset.itertuples(index=False):
             raw_img,
             (z_res / xy_res, xy_res / xy_res, xy_res / xy_res),
             method='bilinear'
-    ).astype(np.unint16)
+    ).astype(np.uint16)
     raw_img_whole = resize_to(
             raw_img, raw_img_rescaled.shape, method='nearest'
     )
@@ -174,11 +174,15 @@ for row in fov_dataset.itertuples(index=False):
                 f'{current_fov_dir}/{label}',
                 'segmentation.ome.tif'
         )
-        # add lines to save here
+        writer = ome_tiff_writer.OmeTiffWriter(crop_seg_path)
+        writer.save(mem_seg, dimension_order='ZYX')
+        raw_img = raw_img_whole[roi[0]: roi[1], roi[2]: roi[3], roi[4]: roi[5]]
         crop_raw_path = os.path.join(
                 f'{current_fov_dir}/{label}',
                 'raw.ome.tif'
         )
+        writer = ome_tiff_writer.OmeTiffWriter(crop_raw_path)
+        writer.save(raw_img, dimension_order='ZYX')
         cell_id = f'{row.NM_ID}_{label}'
         cell_meta.append(
                 {
@@ -192,7 +196,6 @@ for row in fov_dataset.itertuples(index=False):
                     'fov_seg_path': row.MembraneSegmentationReadPath
                 }
         )
-        # anything else I need to add to this dict? idk
 
 # Save cell dataset (every row is a cell)
 df_cell_meta = pd.DataFrame(cell_meta)
