@@ -87,9 +87,12 @@ seg_img_names = []
 for fn in seg_files:
     bn = os.path.basename(fn)
     seg_img_name = bn.rpartition('_')[0]
-    seg_img_names.append({
-        'NM_ID': seg_img_name, 'MembraneSegmentationReadPath': fn
-    })
+    seg_img_names.append(
+            {
+                'NM_ID': seg_img_name,
+                'MembraneSegmentationReadPath': fn
+            }
+    )
 
 raw_df = pd.DataFrame(raw_img_names)
 seg_df = pd.DataFrame(seg_img_names)
@@ -97,6 +100,7 @@ fov_dataset = raw_df(seg_df, on='NM_ID')
 fov_dataset.to_csv(f'{dest_dir}/fov_dataset.csv')
 
 # TODO: Check that new way of making initial fov_dataset works
+# Also consider whether intial fov_dataset creation should be its own script
 
 # Create unique cell_ids
 nm_id_list = []
@@ -133,3 +137,63 @@ for row in fov_dataset.itertuples(index=False):
     raw_img = reader_raw.get_image_data('ZYX', S=0, T=0, C=0)
     reader_seg = AICSImage(row.MembraneSegmentationReadPath)
     seg_img = reader_seg.get_image_data('ZYX', S=0, T=0, C=0)
+    raw_img_rescaled = resize(
+            raw_img,
+            (z_res / xy_res, xy_res / xy_res, xy_res / xy_res),
+            method='bilinear'
+    ).astype(np.unint16)
+    raw_img_whole = resize_to(
+            raw_img, raw_img_rescaled.shape, method='nearest'
+    )
+    mem_seg_whole = resize_to(
+            seg_img, raw_img_rescaled.shape, method='nearest'
+    )
+    cell_label_list = list(np.unique(mem_seg_whole[mem_seg_whole > 0]))
+    for label in cell_label_list:
+        if not os.path.exists(f'{current_fov_dir}/{label}'):
+            os.mkdir(f'{current_fov_dir}/{label}')
+        mem_seg = mem_seg_whole == label
+        z_range = np.where(np.any(mem_seg, axis=(1, 2)))
+        y_range = np.where(np.any(mem_seg, axis=(0, 2)))
+        x_range = np.where(np.any(mem_seg, axis=(0, 1)))
+        z_range = z_range[0]
+        y_range = y_range[0]
+        x_range = x_range[0]
+        roi = [
+                max(z_range[0] - 10, 0),
+                min(z_range[-1] + 12, mem_seg.shape[0]),  # not sure why 12
+                max(y_range[0] - 40, 0),
+                min(y_range[-1] + 40, mem_seg.shape[1]),
+                max(x_range[0] - 40, 0),
+                min(x_range[-1] + 40, mem_seg.shape[2])
+        ]
+        mem_seg = mem_seg.astype(np.uint8)
+        mem_seg = mem_seg[roi[0]: roi[1], roi[2]: roi[3], roi[4]: roi[5]]
+        mem_seg[mem_seg > 0] = 255
+        crop_seg_path = os.path.join(
+                f'{current_fov_dir}/{label}',
+                'segmentation.ome.tif'
+        )
+        # add lines to save here
+        crop_raw_path = os.path.join(
+                f'{current_fov_dir}/{label}',
+                'raw.ome.tif'
+        )
+        cell_id = f'{row.NM_ID}_{label}'
+        cell_meta.append(
+                {
+                    'CellId': cell_id,
+                    'roi': roi,
+                    'crop_raw': crop_raw_path,
+                    'crop_seg': crop_seg_path,
+                    'scale_micron': [xy_res, xy_res, xy_res],
+                    'fov_id': row.NM_ID,
+                    'fov_path': row.SourceReadPath,
+                    'fov_seg_path': row.MembraneSegmentationReadPath
+                }
+        )
+        # anything else I need to add to this dict? idk
+
+# Save cell dataset (every row is a cell)
+df_cell_meta = pd.DataFrame(cell_meta)
+df_cell_meta.to_csv(f'{dest_dir}/cell_manifest.csv')
