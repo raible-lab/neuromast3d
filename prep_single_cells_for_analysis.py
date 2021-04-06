@@ -30,6 +30,10 @@ parser.add_argument('seg_dir', help='directory containing segmented images')
 parser.add_argument('extension', help='file extension to use, e.g. tiff')
 parser.add_argument('dest', help='directory in which to save the files')
 parser.add_argument(
+        'voxel_size',
+        help='3-tuple corresponding to pixel size in X, Y, and Z respectively'
+)
+parser.add_argument(
         '-o',
         '--overwrite',
         help='overwrite files in destination directory',
@@ -42,9 +46,11 @@ raw_source_dir = args.raw_dir
 seg_source_dir = args.seg_dir
 extension = args.extension
 dest_dir = args.dest
+PixelSizeX = args.voxel_size[0]
+PixelSizeY = args.voxel_size[1]
+PixelSizeZ = args.voxel_size[2]
 
 # Check that paths are valid
-# TODO: Add other checks?
 if not os.path.isdir(raw_source_dir):
     print('Raw source dir does not exist')
     sys.exit()
@@ -78,13 +84,15 @@ raw_img_names = []
 for fn in raw_files:
     bn = os.path.basename(fn)
     raw_img_name = bn.split('.')[0]
-    raw_img_names.append({'NM_ID': raw_img_name, 'fov_path': fn})
+    raw_img_names.append({'NM_ID': raw_img_name, 'SourceReadPath': fn})
 
 seg_img_names = []
 for fn in seg_files:
     bn = os.path.basename(fn)
     seg_img_name = bn.rpartition('_')[0]
-    seg_img_names.append({'NM_ID': seg_img_name, 'fov_seg_path': fn})
+    seg_img_names.append({
+        'NM_ID': seg_img_name, 'MembraneSegmentationReadPath': fn
+    })
 
 raw_df = pd.DataFrame(raw_img_names)
 seg_df = pd.DataFrame(seg_img_names)
@@ -112,5 +120,19 @@ for seg_fn in seg_files:
 
 cell_dataset = pd.DataFrame({'NM_ID': nm_id_list, 'CellID': cell_id_list})
 
+# Create dir for single cell masks to go into
+if not os.path.exists(f'{dest_dir}/single_cell_masks'):
+    os.mkdir(f'{dest_dir}/single_cell_masks')
+elif os.path.exists(f'{dest_dir}/single_cell_masks'):
+    print('single cell masks dir already exists')
+
 # Actual cell dataset creation here (above chunk can maybe be deleted?)
 cell_meta = []
+for row in fov_dataset.itertuples(index=False):
+    current_fov_dir = f'{dest_dir}/single_cell_masks/{row.NM_ID}'
+    if not os.path.exists(current_fov_dir):
+        os.mkdir(current_fov_dir)
+    reader_raw = AICSImage(row.SourceReadPath)
+    raw_img = reader_raw.get_image_data('ZYX', S=0, T=0, C=0)
+    reader_seg = AICSImage(row.MembraneSegmentationReadPath)
+    seg_img = reader_seg.get_image_data('ZYX', S=0, T=0, C=0)
