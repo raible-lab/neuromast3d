@@ -53,6 +53,10 @@ if not os.path.isdir(seg_source_dir):
     print('Seg source dir does not exist')
     sys.exit()
 
+if not os.path.isdir(dest_dir):
+    print('Destination directory does not exist')
+    sys.exit()
+
 # Find all files in source dirs and gather image names into list
 raw_files = sorted(glob.glob(f'{raw_source_dir}/*.{extension}'))
 seg_files = sorted(glob.glob(f'{seg_source_dir}/*.{extension}'))
@@ -85,10 +89,11 @@ for fn in seg_files:
 raw_df = pd.DataFrame(raw_img_names)
 seg_df = pd.DataFrame(seg_img_names)
 fov_dataset = raw_df(seg_df, on='NM_ID')
+fov_dataset.to_csv(f'{dest_dir}/fov_dataset.csv')
 
 # TODO: Check that new way of making initial fov_dataset works
 
-# Create single cell dataset from nm label images
+# Create unique cell_ids
 nm_id_list = []
 cell_id_list = []
 for seg_fn in seg_files:
@@ -106,3 +111,6 @@ for seg_fn in seg_files:
 # Min/max size could be passed via command line
 
 cell_dataset = pd.DataFrame({'NM_ID': nm_id_list, 'CellID': cell_id_list})
+
+# Actual cell dataset creation here (above chunk can maybe be deleted?)
+cell_meta = []
