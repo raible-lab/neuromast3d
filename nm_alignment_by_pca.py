@@ -15,7 +15,7 @@ from scipy.ndimage import center_of_mass
 from sklearn.decomposition import PCA
 
 # Constants (note: these are guessed right now)
-PixelScaleZ = 0.224
+PixelScaleZ = 0.2224
 PixelScaleX = 0.0497
 PixelScaleY = PixelScaleX
 standard_res_qcb = PixelScaleX
@@ -43,19 +43,6 @@ def rotate_image_2d(image, angle, interpolation_order=0):
     img_aligned = img_aligned.astype(image.dtype)
 
     return img_aligned
-
-
-def get_largest_cc(image):
-    largest_cc = np.argmax(np.bincount(image.flat))
-    return largest_cc
-
-
-def switch_label_values(label_image, first, second):
-    last_label = label_image.max()
-    label_image = np.where(label_image == first, last_label + 1, label_image)
-    label_image = np.where(label_image == second, first, label_image)
-    label_image = np.where(label_image == last_label + 1, second, label_image)
-    return label_image
 
 
 def unit_vector(vector):
@@ -117,23 +104,19 @@ img_id = '20200617_1-O1'
 raw_reader = AICSImage(f'{project_dir}/stack_aligned/{img_id}.tiff')
 raw_img = raw_reader.get_image_data('ZYX', S=0, T=0, C=0)
 
-seg_reader = AICSImage(f'{project_dir}/label_images/{img_id}_rawlabels.tiff')
+seg_reader = AICSImage(
+        f'{project_dir}/label_images_fixed_bg/{img_id}_rawlabels.tiff'
+)
 seg_img = seg_reader.get_image_data('ZYX', S=0, T=0, C=0)
+
+# Merge cell labels together to create whole neuromast (nm) mask
+nm = seg_img > 0
+nm = nm.astype(np.uint8)
+nm = nm*255
 
 # Interpolate along z to create isotropic voxel dimensions
 # (same as preparing single cells for cvapipe_analysis)
-"""
-raw_img = resize(
-        raw_img,
-        (
-            PixelScaleZ / standard_res_qcb,
-            PixelScaleY / standard_res_qcb,
-            PixelScaleX / standard_res_qcb
-        ),
-        method='bilinear'
-    ).astype(np.uint16)
-
-seg_img = resize(
+nm = resize(
         seg_img,
         (
             PixelScaleZ / standard_res_qcb,
@@ -141,18 +124,7 @@ seg_img = resize(
             PixelScaleX / standard_res_qcb
         ),
         method='bilinear'
-    ).astype(np.uint16)
-"""
-# Fix segmentation so background label is 0
-# This assumes the largest connected component is the background
-lcc = get_largest_cc(seg_img)
-seg_img = switch_label_values(seg_img, 0, lcc)
-
-# Merge cell labels together to create whole neuromast (nm) mask
-nm = seg_img > 0
-nm = nm.astype(np.uint8)
-nm = nm*255
-
+)
 # Clean up the neuromast mask (could investigate other functions here)
 nm = binary_closing(nm, ball(5))
 
@@ -168,7 +140,7 @@ viz_vector = prepare_vector_for_napari(
         eigenvecs[0],
         origin=(nm_centroid[2], nm_centroid[1]),
         scale=100
-        )
+)
 
 cell_angles = []
 for cell, props in enumerate(single_cell_props):
@@ -189,17 +161,13 @@ for cell, props in enumerate(single_cell_props):
     cell_angles = np.append(cell_angles, angle)
     cell_img = np.expand_dims(cell_img, axis=0)
     cell_rot = rotate_image_2d(cell_img, angle)
-    save_path = f'{project_dir}/rotation_test/{cell}.ome.tif'
+    save_path = f'{project_dir}/cvapipe_run_2/rotation_test/{cell}.ome.tif'
     writer = ome_tiff_writer.OmeTiffWriter(save_path, overwrite_file=True)
     writer.save(cell_rot)
 
 """
-IMPORTANT NOTE: Because the background label issue was NOT corrected at the
-time of this run, the cell numbers in cell_angles and manifest.csv probably do
-not exactly match up.
-
-We may want to run the pipeline again after running the bg label correction
-on all of the segmented images as a script.
+Note: the background issue has been corrected for cvapipe_run_2
+We no longer need to correct the fact that bg labels were sometimes nonzero.
 
 df = pd.read_csv(f'{project_dir}/local_staging/loaddata/manifest.csv')
 num_cells = len(cell_angles)
