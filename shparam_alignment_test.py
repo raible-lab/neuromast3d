@@ -3,11 +3,41 @@
 
 import os
 import numpy as np
+from scipy.ndimage import center_of_mass
+from skimage.measure import regionprops
+from skimage.morphology import ball, binary_closing
 from aicsimageio import AICSImage
 from aicsshparam import shtools, shparam
 
-test_dir = '/home/maddy/projects/claudin_gfp_5dpf_airy_live/single_cell_masks'
-test_nm_dir = f'{test_dir}/20200617_1-O1'
+
+def get_largest_cc(image):
+    largest_cc = np.argmax(np.bincount(image.flat))
+    return largest_cc
+
+
+def switch_label_values(label_image, first, second):
+    last_label = label_image.max()
+    label_image = np.where(label_image == first, last_label + 1, label_image)
+    label_image = np.where(label_image == second, first, label_image)
+    label_image = np.where(label_image == last_label + 1, second, label_image)
+    return label_image
+
+
+project_dir = '/home/maddy/projects/claudin_gfp_5dpf_airy_live/'
+test_nm = '20200617_1-O1'
+test_nm_dir = f'{project_dir}/single_cell_masks/{test_nm}'
+
+whole_seg_reader = AICSImage(
+        f'{project_dir}/label_images/{test_nm}_rawlabels.tiff'
+        )
+whole_seg_img = whole_seg_reader.get_image_data('ZYX', S=0, T=0, C=0)
+
+lcc = get_largest_cc(whole_seg_img)
+whole_seg_img = switch_label_values(whole_seg_img, 0, lcc)
+
+whole_nm = whole_seg_img[whole_seg_img > 0].astype(np.uint8)
+whole_nm = binary_closing(whole_nm, ball(5))
+whole_nm_centroid = center_of_mass(whole_nm)
 
 for root, dirs, files in os.walk(test_nm_dir):
     for dire in dirs:
@@ -20,8 +50,8 @@ for root, dirs, files in os.walk(test_nm_dir):
 
         ref_aligned, angle = shtools.align_image_2d(seg_img, make_unique=True)
         img_aligned = shtools.apply_image_alignment_2d(
-                image = ref_aligned,
-                angle = angle
+                image=ref_aligned,
+                angle=angle
             ).squeeze()
 
         (coeffs, grid_rec), (image_, mesh, grid_down, transform) = shparam.get_shcoeffs(
@@ -30,7 +60,7 @@ for root, dirs, files in os.walk(test_nm_dir):
                 sigma = 2,
                 compute_lcc = True,
                 alignment_2d = False,
-                make_unique = False 
+                make_unique = False
             )
 
         shtools.save_polydata(mesh, f'alignment_test_uniq/{cell_number}.vtk')
