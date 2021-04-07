@@ -7,6 +7,7 @@ from aicsimageprocessing import resize, resize_to
 import napari
 import numpy as np
 import pandas as pd
+from scipy.stats import skew
 from skimage.morphology import binary_closing, ball
 from skimage.measure import regionprops
 from skimage.transform import rotate
@@ -173,16 +174,32 @@ cell_angles = []
 for cell, props in enumerate(single_cell_props):
     cell_centroid = single_cell_props[cell]['centroid']
     cell_centroid = np.subtract(nm_centroid, cell_centroid)
+    # New stuff, testing what difference it makes for 'make_unique'
+    cell_img = single_cell_props[cell]['image']
+    cell_img = cell_img.astype(np.uint8)
+    cell_img = cell_img*255
+    z, y, x = np.nonzero(cell_img)
     angle = 180.0 * np.arctan2(cell_centroid[1], cell_centroid[2]) / np.pi
+    x_rot = (x - x.mean()) * np.cos(np.pi * angle / 180) + (
+            y - y.mean()) * np.sin(np.pi * angle / 180)
+    xsk = skew(x_rot)
+    if xsk < 0.0:
+        angle += 180
+    angle = angle % 360
     cell_angles = np.append(cell_angles, angle)
+    cell_img = np.expand_dims(cell_img, axis=0)
+    cell_rot = rotate_image_2d(cell_img, angle)
+    save_path = f'{project_dir}/rotation_test/{cell}.ome.tif'
+    writer = ome_tiff_writer.OmeTiffWriter(save_path, overwrite_file=True)
+    writer.save(cell_rot)
 
-single_cell = np.where(seg_img == 1, seg_img, 0)
-single_cell = np.expand_dims(single_cell, axis=0)
-single_cell_rot = rotate_image_2d(single_cell, cell_angles[0])
 """
 IMPORTANT NOTE: Because the background label issue was NOT corrected at the
 time of this run, the cell numbers in cell_angles and manifest.csv probably do
 not exactly match up.
+
+We may want to run the pipeline again after running the bg label correction
+on all of the segmented images as a script.
 
 df = pd.read_csv(f'{project_dir}/local_staging/loaddata/manifest.csv')
 num_cells = len(cell_angles)
