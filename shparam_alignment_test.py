@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
+""" Test alignment methods prior to spherical harmonics paramterization """
+
 import os
 
 import numpy as np
@@ -40,12 +42,12 @@ for root, dirs, files in os.walk(test_nm_dir):
             ).squeeze()
 
         (coeffs, grid_rec), (image_, mesh, grid_down, transform) = shparam.get_shcoeffs(
-                image = img_aligned,
-                lmax = 16,
-                sigma = 2,
-                compute_lcc = True,
-                alignment_2d = False,
-                make_unique = False
+                image=img_aligned,
+                lmax=16,
+                sigma=2,
+                compute_lcc=True,
+                alignment_2d=False,
+                make_unique=False
             )
 
         shtools.save_polydata(mesh, f'alignment_test_uniq/{cell_number}.vtk')
