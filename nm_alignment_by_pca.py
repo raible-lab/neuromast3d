@@ -75,12 +75,27 @@ def prepare_vector_for_napari(vector, origin, scale=1):
 
 def find_major_axis_by_pca(image, threed=False):
     if threed:
+
+        # Find three major axes
         pca = PCA(n_components=3)
+
         # image = image.reshape(1, *image.shape)
+
+        # Find coordinates where image has a nonzero value (i.e. is not bg)
+        # Assumes image has been read in by ZYX dimension order
         z, y, x = np.nonzero(image)
+
+        # The 'xyz' object has final shape (N, 3) where N is the number
+        # of coordinates where the image has a nonzero value and the three
+        # columns coorrespond to x, y, and z coordinates respectively
         xyz = np.hstack([x.reshape(-1, 1), y.reshape(-1, 1), z.reshape(-1, 1)])
+
+        # Major axes returned as ndarray of shape (3, 3)
+        # Each row vector = a major axis, arranged in descending order
+        # Each column corresponds to x, y, and z values respectively
         pca = pca.fit(xyz)
         eigenvecs = pca.components_
+
     else:
         pca = PCA(n_components=2)
         # image = image.reshape(1, *image.shape)
@@ -97,51 +112,54 @@ def get_membrane_segmentation(path_to_seg):
     return seg_mem
 
 
-project_dir = '/home/maddy/projects/claudin_gfp_5dpf_airy_live/'
-img_id = '20200617_1-O1'
+if __name__ == '__main__':
+    project_dir = '/home/maddy/projects/claudin_gfp_5dpf_airy_live/'
+    img_id = '20200617_1-O1'
 
-# Read in raw and segmented images
-raw_reader = AICSImage(f'{project_dir}/stack_aligned/{img_id}.tiff')
-raw_img = raw_reader.get_image_data('ZYX', S=0, T=0, C=0)
+    # Read in raw and segmented images
+    raw_reader = AICSImage(f'{project_dir}/stack_aligned/{img_id}.tiff')
+    raw_img = raw_reader.get_image_data('ZYX', S=0, T=0, C=0)
 
-seg_reader = AICSImage(
-        f'{project_dir}/label_images_fixed_bg/{img_id}_rawlabels.tiff'
-)
-seg_img = seg_reader.get_image_data('ZYX', S=0, T=0, C=0)
+    seg_reader = AICSImage(
+            f'{project_dir}/label_images_fixed_bg/{img_id}_rawlabels.tiff'
+    )
+    seg_img = seg_reader.get_image_data('ZYX', S=0, T=0, C=0)
 
-# Merge cell labels together to create whole neuromast (nm) mask
-nm = seg_img > 0
-nm = nm.astype(np.uint8)
-nm = nm*255
+    # Merge cell labels together to create whole neuromast (nm) mask
+    nm = seg_img > 0
 
-# Interpolate along z to create isotropic voxel dimensions
-# (same as preparing single cells for cvapipe_analysis)
-nm = resize(
-        seg_img,
-        (
-            PixelScaleZ / standard_res_qcb,
-            PixelScaleY / standard_res_qcb,
-            PixelScaleX / standard_res_qcb
-        ),
-        method='bilinear'
-)
-# Clean up the neuromast mask (could investigate other functions here)
-nm = binary_closing(nm, ball(5))
+    # Interpolate along z to create isotropic voxel dimensions
+    # (same as preparing single cells for cvapipe_analysis)
+    nm = resize(
+            seg_img,
+            (
+                PixelScaleZ / standard_res_qcb,
+                PixelScaleY / standard_res_qcb,
+                PixelScaleX / standard_res_qcb
+            ),
+            method='bilinear'
+    )
 
-# Use PCA to find major axis of 3D binary mask
-eigenvecs = find_major_axis_by_pca(nm, threed=False)
+    # Clean up the neuromast mask (could investigate other functions here)
+    nm = binary_closing(nm, ball(5))
+    nm = nm.astype(np.uint8)
+    nm = nm*255
 
-# Find centroid of neuromast and each cell
-nm_centroid = center_of_mass(nm)
-single_cell_props = regionprops(seg_img)
+    # Use PCA to find major axis of 3D binary mask
+    eigenvecs = find_major_axis_by_pca(nm, threed=True)
 
-# Vizualize the vector
-viz_vector = prepare_vector_for_napari(
-        eigenvecs[0],
-        origin=(nm_centroid[2], nm_centroid[1]),
-        scale=100
-)
+    # Find centroid of neuromast and each cell
+    nm_centroid = center_of_mass(nm)
+    single_cell_props = regionprops(seg_img)
 
+    # Vizualize the vector
+    viz_vector = prepare_vector_for_napari(
+            eigenvecs[0],
+            origin=(nm_centroid),
+            scale=100
+    )
+
+"""
 cell_angles = []
 for cell, props in enumerate(single_cell_props):
     cell_centroid = single_cell_props[cell]['centroid']
@@ -164,7 +182,7 @@ for cell, props in enumerate(single_cell_props):
     save_path = f'{project_dir}/cvapipe_run_2/rotation_test/{cell}.ome.tif'
     writer = ome_tiff_writer.OmeTiffWriter(save_path, overwrite_file=True)
     writer.save(cell_rot)
-
+"""
 """
 Note: the background issue has been corrected for cvapipe_run_2
 We no longer need to correct the fact that bg labels were sometimes nonzero.
