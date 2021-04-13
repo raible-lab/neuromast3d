@@ -1,6 +1,8 @@
 #!usr/bin/env python3
 # -*- coding: utf-8 -*-
 
+""" File containing tests for functions that I have written """
+
 import unittest
 
 import numpy as np
