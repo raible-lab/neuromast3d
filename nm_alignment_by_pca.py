@@ -207,4 +207,4 @@ if __name__ == '__main__':
         seg_rot = rotate_image_2d(seg_cell, angle, interpolation_order=0)
         save_path = f'{project_dir}/cvapipe_run_2/rotation_test/{row.CellId}.ome.tif'
         writer = ome_tiff_writer.OmeTiffWriter(save_path, overwrite_file=True)
-        writer.save(seg_rot)
+        writer.save(seg_rot, dimension_order='ZYX')
