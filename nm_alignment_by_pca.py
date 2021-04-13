@@ -114,14 +114,14 @@ def get_membrane_segmentation(path_to_seg):
 
 if __name__ == '__main__':
     project_dir = '/home/maddy/projects/claudin_gfp_5dpf_airy_live/'
-    img_id = '20200617_1-O1'
+    nm_id = '20200617_1-SO2'
 
     # Read in raw and segmented images
-    raw_reader = AICSImage(f'{project_dir}/stack_aligned/{img_id}.tiff')
+    raw_reader = AICSImage(f'{project_dir}/stack_aligned/{nm_id}.tiff')
     raw_img = raw_reader.get_image_data('ZYX', S=0, T=0, C=0)
 
     seg_reader = AICSImage(
-            f'{project_dir}/label_images_fixed_bg/{img_id}_rawlabels.tiff'
+            f'{project_dir}/label_images_fixed_bg/{nm_id}_rawlabels.tiff'
     )
     seg_img = seg_reader.get_image_data('ZYX', S=0, T=0, C=0)
 
@@ -154,49 +154,57 @@ if __name__ == '__main__':
 
     # Vizualize the vector
     viz_vector = prepare_vector_for_napari(
-            eigenvecs[0],
+            # Needs to be flipped - dims in xyz order but napari expects zyx
+            np.flip(eigenvecs[0]),
             origin=(nm_centroid),
             scale=100
     )
 
-"""
-cell_angles = []
-for cell, props in enumerate(single_cell_props):
-    cell_centroid = single_cell_props[cell]['centroid']
-    cell_centroid = np.subtract(nm_centroid, cell_centroid)
-    # New stuff, testing what difference it makes for 'make_unique'
-    cell_img = single_cell_props[cell]['image']
-    cell_img = cell_img.astype(np.uint8)
-    cell_img = cell_img*255
-    z, y, x = np.nonzero(cell_img)
-    angle = 180.0 * np.arctan2(cell_centroid[1], cell_centroid[2]) / np.pi
-    x_rot = (x - x.mean()) * np.cos(np.pi * angle / 180) + (
-            y - y.mean()) * np.sin(np.pi * angle / 180)
-    xsk = skew(x_rot)
-    if xsk < 0.0:
-        angle += 180
-    angle = angle % 360
-    cell_angles = np.append(cell_angles, angle)
-    cell_img = np.expand_dims(cell_img, axis=0)
-    cell_rot = rotate_image_2d(cell_img, angle)
-    save_path = f'{project_dir}/cvapipe_run_2/rotation_test/{cell}.ome.tif'
-    writer = ome_tiff_writer.OmeTiffWriter(save_path, overwrite_file=True)
-    writer.save(cell_rot)
-"""
-"""
-Note: the background issue has been corrected for cvapipe_run_2
-We no longer need to correct the fact that bg labels were sometimes nonzero.
+    cell_angles = []
+    for cell, props in enumerate(single_cell_props):
 
-df = pd.read_csv(f'{project_dir}/local_staging/loaddata/manifest.csv')
-num_cells = len(cell_angles)
-df = df.iloc[:num_cells]
+        # Recreate CellId to ensure rotation applied to correct cell later
+        cell_num = cell + 1
+        cell_id = f'{nm_id}_{cell_num}'
 
-for row, index in enumerate(df['crop_seg']):
-    seg_cell = get_membrane_segmentation(index)
-    seg_cell = np.expand_dims(seg_cell, axis=0)
-    angle = cell_angles[row]
-    seg_rot = rotate_image_2d(seg_cell, angle, interpolation_order=0)
-    save_path = f'{project_dir}/rotation_test/{row}.ome.tif'
-    writer = ome_tiff_writer.OmeTiffWriter(save_path, overwrite_file=True)
-    writer.save(seg_rot)
-"""
+        # Find centroid position relative to nm_centroid
+        cell_centroid = single_cell_props[cell]['centroid']
+        cell_centroid = np.subtract(nm_centroid, cell_centroid)
+
+        # New stuff, testing what difference it makes for 'make_unique'
+        cell_img = single_cell_props[cell]['image']
+        cell_img = cell_img.astype(np.uint8)
+        cell_img = cell_img*255
+        z, y, x = np.nonzero(cell_img)
+        angle = 180.0 * np.arctan2(cell_centroid[1], cell_centroid[2]) / np.pi
+        x_rot = (x - x.mean()) * np.cos(np.pi * angle / 180) + (
+                y - y.mean()) * np.sin(np.pi * angle / 180)
+        xsk = skew(x_rot)
+        if xsk < 0.0:
+            angle += 180
+        angle = angle % 360
+
+        # Save cell angles matched with cell_ids
+        cell_angles.append({'CellId': cell_id, 'angle': angle})
+
+    # Note: the background issue has been corrected for cvapipe_run_2
+    # We no longer need to correct for bg labels that were sometimes nonzero
+
+    cell_df = pd.read_csv(
+            f'{project_dir}/cvapipe_run_2/cell_manifest.csv',
+            index_col=0
+    )
+    angle_df = pd.DataFrame(cell_angles)
+    df = cell_df.merge(angle_df, on='CellId')
+
+    # Temporarily truncate df for testing
+    df = df.loc[df['fov_id'] == nm_id]
+
+    for row in df.itertuples(index=False):
+        seg_cell = get_membrane_segmentation(row.crop_seg)
+        seg_cell = np.expand_dims(seg_cell, axis=0)
+        angle = row.angle
+        seg_rot = rotate_image_2d(seg_cell, angle, interpolation_order=0)
+        save_path = f'{project_dir}/cvapipe_run_2/rotation_test/{row.CellId}.ome.tif'
+        writer = ome_tiff_writer.OmeTiffWriter(save_path, overwrite_file=True)
+        writer.save(seg_rot)
