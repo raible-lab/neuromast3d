@@ -169,6 +169,8 @@ if __name__ == '__main__':
 
         # Find centroid position relative to nm_centroid
         cell_centroid = single_cell_props[cell]['centroid']
+
+        # Is this right? Should nm and cell centroid be switched?
         cell_centroid = np.subtract(nm_centroid, cell_centroid)
 
         # New stuff, testing what difference it makes for 'make_unique'
@@ -208,3 +210,9 @@ if __name__ == '__main__':
         save_path = f'{project_dir}/cvapipe_run_2/rotation_test/{row.CellId}.ome.tif'
         writer = ome_tiff_writer.OmeTiffWriter(save_path, overwrite_file=True)
         writer.save(seg_rot, dimension_order='ZYX')
+        # Question: Do we need to crop the cells again after the rotation?
+        # Check if rotation adds padding and if so, if this is a problem.
+        # We're using their rotation function so it's probably fine
+        # however it is.
+        # Also unsure if the cells need to be centered on their centroids
+        # Maybe we should test what happens if we do that.
