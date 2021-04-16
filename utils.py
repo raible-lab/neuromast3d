@@ -2,17 +2,8 @@
 # -*- coding: utf-8 -*-
 
 from aicsimageio import AICSImage
-from aicsimageio.writers import ome_tiff_writer
-from aicsimageprocessing import resize, resize_to
-import napari
 import numpy as np
-import pandas as pd
-from scipy.stats import skew
-from skimage.morphology import binary_closing, ball
-from skimage.measure import regionprops
 from skimage.transform import rotate
-from scipy.ndimage import center_of_mass
-from sklearn.decomposition import PCA
 
 
 def rotate_image_2d(image, angle, interpolation_order=0):
