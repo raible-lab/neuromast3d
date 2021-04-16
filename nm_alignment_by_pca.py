@@ -178,6 +178,8 @@ if __name__ == '__main__':
         cell_img = cell_img.astype(np.uint8)
         cell_img = cell_img*255
         z, y, x = np.nonzero(cell_img)
+
+        # Eigenvecs need to be used somewhere in here
         angle = 180.0 * np.arctan2(cell_centroid[1], cell_centroid[2]) / np.pi
         x_rot = (x - x.mean()) * np.cos(np.pi * angle / 180) + (
                 y - y.mean()) * np.sin(np.pi * angle / 180)
