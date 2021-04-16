@@ -80,25 +80,6 @@ def prepare_vector_for_napari(vector, origin, scale=1):
     return napari_vector
 
 
-def find_major_axis_by_pca(image, threed=False):
-    if threed:
-        pca = PCA(n_components=3)
-        # image = image.reshape(1, *image.shape)
-        z, y, x = np.nonzero(image)
-        xyz = np.hstack([x.reshape(-1, 1), y.reshape(-1, 1), z.reshape(-1, 1)])
-        pca = pca.fit(xyz)
-        eigenvecs = pca.components_
-    else:
-        pca = PCA(n_components=2)
-        # image = image.reshape(1, *image.shape)
-        print(image.shape)
-        z, y, x = np.nonzero(image)
-        xy = np.hstack([x.reshape(-1, 1), y.reshape(-1, 1)])
-        pca = pca.fit(xy)
-        eigenvecs = pca.components_
-    return eigenvecs
-
-
 def get_membrane_segmentation(path_to_seg):
     seg_mem = AICSImage(path_to_seg).data.squeeze()
     return seg_mem

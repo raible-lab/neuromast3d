@@ -14,47 +14,14 @@ from skimage.transform import rotate
 from scipy.ndimage import center_of_mass
 from sklearn.decomposition import PCA
 
+from utils import rotate_image_2d, get_membrane_segmentation, unit_vector, \
+        angle_between
+
 # Constants (note: these are guessed right now)
 PixelScaleZ = 0.2224
 PixelScaleX = 0.0497
 PixelScaleY = PixelScaleX
 standard_res_qcb = PixelScaleX
-
-
-def rotate_image_2d(image, angle, interpolation_order=0):
-    if image.ndim != 4:
-        raise ValueError(f'Invalid shape {image.shape} of input image.')
-
-    image = np.swapaxes(image, 1, 3)
-
-    img_aligned = []
-    for stack in image:
-        stack_aligned = rotate(
-                image=stack,
-                angle=-angle,
-                resize=True,
-                order=interpolation_order,
-                preserve_range=True
-                )
-        img_aligned.append(stack_aligned)
-    img_aligned = np.array(img_aligned)
-
-    img_aligned = np.swapaxes(img_aligned, 1, 3)
-    img_aligned = img_aligned.astype(image.dtype)
-
-    return img_aligned
-
-
-def unit_vector(vector):
-    uvec = vector / np.linalg.norm(vector)
-    return uvec
-
-
-def angle_between(v1, v2):
-    v1_u = unit_vector(v1)
-    v2_u = unit_vector(v2)
-    angle = np.archos(np.clip(np.dot(v1_u, v2_u), -1.0, 1.0))
-    return angle
 
 
 def prepare_vector_for_napari(vector, origin, scale=1):
@@ -105,11 +72,6 @@ def find_major_axis_by_pca(image, threed=False):
         pca = pca.fit(xy)
         eigenvecs = pca.components_
     return eigenvecs
-
-
-def get_membrane_segmentation(path_to_seg):
-    seg_mem = AICSImage(path_to_seg).data.squeeze()
-    return seg_mem
 
 
 if __name__ == '__main__':
