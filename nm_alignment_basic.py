@@ -9,6 +9,7 @@ and does not try to align cells to an organismal axis (e.g. A/P, D/V).
 
 import argparse
 import os
+import pathlib
 import sys
 
 from aicsimageio import AICSImage
@@ -53,6 +54,10 @@ if not os.path.isdir(project_dir):
 # Read the manifest to align cells for this run
 cell_df = pd.read_csv(path_to_manifest, index_col=0)
 
+# Create dir to save for this step
+step_local_path = f'{project_dir}/alignment'
+pathlib.Path(step_local_path).mkdir(parents=True, exist_ok=True)
+
 # Add labels column (TODO: consider adding this step upstream)
 cell_ids = cell_df['CellId']
 cell_df['label'] = cell_ids.str.split('_', expand=True)[2]
@@ -93,12 +98,11 @@ for fov in fov_df.itertuples(index=False):
 
     for cell in current_fov_cells.itertuples(index=False):
 
-        # TODO: Figure out why this throws FutureWarning (maybe fixed with int?)
         # Actually we were never calculating the cell centroid based on
         # the interpolated image... should we be? That would only throw off
         # the z value I think? We'll try it here
         label = int(cell.label)
-        cell_img = np.nonzero(seg_img == label)
+        cell_img = np.where(seg_img == label, seg_img, 0)
         cell_centroid = center_of_mass(cell_img)
         cell_centroid = np.subtract(cell_centroid, nm_centroid)
 
@@ -132,6 +136,19 @@ for fov in fov_df.itertuples(index=False):
         # Save angle matched to cell_id
         cell_angles.append({'CellId': cell.CellId, 'rotation_angle': angle})
 
+        # Apply alignment to cell
+        cell_aligned = rotate_image_2d(
+                image=cell_img,
+                angle=angle,
+                interpolation_order=0
+        )
+
+        # Save aligned single cell mask
+        current_cell_dir = f'{step_local_path}/fov.fov_id/{label}'
+        pathlib.Path(current_cell_dir).mkdir(parents=True, exist_ok=True)
+        crop_seg_aligned_path = pathlib.Path(current_cell_dir / 'segmentation.ome.tif')
+        writer = ome_tiff_writer.OmeTiffWriter(crop_seg_aligned_path)
+        writer.save(cell_aligned, dimension_order='ZYX')
 
 # Add to cell_df
 fov_centroid_df = pd.DataFrame(nm_centroids)
@@ -139,4 +156,5 @@ cell_df = cell_df.merge(fov_centroid_df, on='fov_id')
 
 # Save angles to cell manifest
 angle_df = pd.DataFrame(cell_angles)
-output_df = cell_df.merge(angle_df, on='CellId')
+cell_df = cell_df.merge(angle_df, on='CellId')
+cell_df.to_csv(step_local_path / 'manifest.csv')
