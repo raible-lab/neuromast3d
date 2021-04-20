@@ -92,7 +92,19 @@ cell_df = cell_df.merge(fov_centroid_df, on='fov_id')
 cell_angles = []
 
 for row in cell_df.itertuples(index=False):
-    cell_img = np.where(seg_img == row.label, seg_img, 0)
+
+    # TODO: Figure out why this throws FutureWarning (maybe fixed with int?)
+    # Also uhhh we need the label image again here...
+    # Is it worth figuring out how to nest this loop into the last one?
+    seg_reader = AICSImage(row.fov_seg_path)
+    seg_img = seg_reader.get_image_data('ZYX', S=0, T=0, C=0)
+
+    # Wait but now it's not interpolated!! Oh snap! Does that matter?
+    # Actually we were never calculating the cell centroid based on
+    # the interpolated image... should we be? That would only throw off
+    # the z value I think?
+    label = int(row.label)
+    cell_img = np.nonzero(seg_img == label)
     cell_centroid = center_of_mass(cell_img)
     cell_centroid = np.subtract(cell_centroid, row.nm_centroid)
 
