@@ -22,6 +22,8 @@ from skimage.measure import regionprops
 from skimage.transform import rotate
 from scipy.ndimage import center_of_mass
 
+from utils import rotate_image_2d
+
 
 # Command line arguments
 parser = argparse.ArgumentParser(description='Basic cell alignment')
@@ -55,11 +57,15 @@ cell_df = pd.read_csv(path_to_manifest, index_col=0)
 cell_ids = cell_df['CellId']
 cell_df['label'] = cell_ids.str.split('_', expand=True)[2]
 
-# Cell alignment
-cell_angles = []
-for row in cell_df.itertuples(index=False):
+# Create fov dataframe
+fov_df = cell_df.copy()
+fov_df.drop_duplicates(subset=['fov_id'], keep='first', inplace=True)
+fov_df.drop(['CellId', 'crop_raw', 'crop_seg', 'roi'], axis=1, inplace=True)
 
-    # Calculate centroids and vectors using fov label image
+# Calculate neuromast centroid
+nm_centroids = []
+
+for row in fov_df.itertuples(index=False):
     seg_reader = AICSImage(row.fov_seg_path)
     seg_img = seg_reader.get_image_data('ZYX', S=0, T=0, C=0)
     nm = seg_img > 0
@@ -74,9 +80,21 @@ for row in cell_df.itertuples(index=False):
     )
     nm = binary_closing(nm, ball(5))
     nm_centroid = center_of_mass(nm)
+
+    # Save nm centroids matched to fov_id
+    nm_centroids.append({'fov_id': row.fov_id, 'nm_centroid': nm_centroid})
+
+# Add to cell_df
+fov_centroid_df = pd.DataFrame(nm_centroids)
+cell_df = cell_df.merge(fov_centroid_df, on='fov_id')
+
+# Calculate angles for cell alignment
+cell_angles = []
+
+for row in cell_df.itertuples(index=False):
     cell_img = np.where(seg_img == row.label, seg_img, 0)
     cell_centroid = center_of_mass(cell_img)
-    cell_centroid = np.subtract(cell_centroid, nm_centroid)
+    cell_centroid = np.subtract(cell_centroid, row.nm_centroid)
 
     # Calculate alignment angle in xy plane
     cell_img = cell_img.astype(np.uint8)
@@ -108,5 +126,6 @@ for row in cell_df.itertuples(index=False):
     # Save angle matched to cell_id
     cell_angles.append({'CellId': row.CellId, 'rotation_angle': angle})
 
+# Save angles to cell manifest
 angle_df = pd.DataFrame(cell_angles)
 output_df = cell_df.merge(angle_df, on='CellId')
