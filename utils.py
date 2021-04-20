@@ -6,10 +6,16 @@ import numpy as np
 from skimage.transform import rotate
 
 
-def rotate_image_2d(image, angle, interpolation_order=0):
+def rotate_image_2d(image: np.array, angle: float, interpolation_order: int = 0):
+    """ Source: aicsshparam/shtools.py """
+
     if image.ndim != 4:
         raise ValueError(f'Invalid shape {image.shape} of input image.')
 
+    if not isinstance(interpolation_order, int):
+        raise ValueError('Only integer values are accepted for interpolation order.')
+
+    # Make z to be the last axis. Required for skimage rotation.
     image = np.swapaxes(image, 1, 3)
 
     img_aligned = []
@@ -20,7 +26,7 @@ def rotate_image_2d(image, angle, interpolation_order=0):
                 resize=True,
                 order=interpolation_order,
                 preserve_range=True
-                )
+        )
         img_aligned.append(stack_aligned)
     img_aligned = np.array(img_aligned)
 
