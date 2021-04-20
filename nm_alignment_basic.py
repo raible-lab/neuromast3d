@@ -13,7 +13,7 @@ import sys
 
 from aicsimageio import AICSImage
 from aicsimageio.writers import ome_tiff_writer
-from aicsimageprocessing import resize
+from aicsimageprocessing import resize, resize_to
 import numpy as np
 import pandas as pd
 from scipy.stats import skew
@@ -65,8 +65,11 @@ fov_df.drop(['CellId', 'crop_raw', 'crop_seg', 'roi'], axis=1, inplace=True)
 # Calculate neuromast centroid
 nm_centroids = []
 
-for row in fov_df.itertuples(index=False):
-    seg_reader = AICSImage(row.fov_seg_path)
+# Calculate angles for cell alignment
+cell_angles = []
+
+for fov in fov_df.itertuples(index=False):
+    seg_reader = AICSImage(fov.fov_seg_path)
     seg_img = seg_reader.get_image_data('ZYX', S=0, T=0, C=0)
     nm = seg_img > 0
     nm = resize(
@@ -78,65 +81,61 @@ for row in fov_df.itertuples(index=False):
             ),
             method='bilinear'
     )
+    seg_img = resize_to(seg_img, nm.shape, method='nearest')
     nm = binary_closing(nm, ball(5))
     nm_centroid = center_of_mass(nm)
 
     # Save nm centroids matched to fov_id
-    nm_centroids.append({'fov_id': row.fov_id, 'nm_centroid': nm_centroid})
+    nm_centroids.append({'fov_id': fov.fov_id, 'nm_centroid': nm_centroid})
+
+    # Subset cell df for this fov
+    current_fov_cells = cell_df[cell_df['fov_id'] == fov.fov_id]
+
+    for cell in current_fov_cells.itertuples(index=False):
+
+        # TODO: Figure out why this throws FutureWarning (maybe fixed with int?)
+        # Actually we were never calculating the cell centroid based on
+        # the interpolated image... should we be? That would only throw off
+        # the z value I think? We'll try it here
+        label = int(cell.label)
+        cell_img = np.nonzero(seg_img == label)
+        cell_centroid = center_of_mass(cell_img)
+        cell_centroid = np.subtract(cell_centroid, nm_centroid)
+
+        # Calculate alignment angle in xy plane
+        cell_img = cell_img.astype(np.uint8)
+        cell_img = cell_img * 255
+        z, y, x = np.nonzero(cell_img)
+
+        if args.make_unique:
+
+            # Calculate angle with atan2 to preserve orientation
+            # I think this SHOULD align to the 3 o' clock position?
+            angle = 180 * np.arctan2(cell_centroid[1], cell_centroid[2]) / np.pi
+
+            # Still don't fully understand what's going on in this section
+            # TODO: Write tests to ensure rotation is centered etc.
+            x_rot = (x - x.mean()) * np.cos(np.pi * angle / 180) + (
+                    y - y.mean()) * np.sin(np.pi * angle / 180)
+            xsk = skew(x_rot)
+            if xsk < 0.0:
+                angle += 180
+            angle = angle % 360
+
+        else:
+
+            # Calculate smallest angle
+            angle = 0.0
+            if np.abs(cell_centroid[2]) > 1e-12:  # avoid divide by zero error ig?
+                angle = 180 * np.arctan(cell_centroid[1] / cell_centroid[2]) / np.pi
+
+        # Save angle matched to cell_id
+        cell_angles.append({'CellId': cell.CellId, 'rotation_angle': angle})
+
 
 # Add to cell_df
 fov_centroid_df = pd.DataFrame(nm_centroids)
 cell_df = cell_df.merge(fov_centroid_df, on='fov_id')
-
-# Calculate angles for cell alignment
-cell_angles = []
-
-for row in cell_df.itertuples(index=False):
-
-    # TODO: Figure out why this throws FutureWarning (maybe fixed with int?)
-    # Also uhhh we need the label image again here...
-    # Is it worth figuring out how to nest this loop into the last one?
-    seg_reader = AICSImage(row.fov_seg_path)
-    seg_img = seg_reader.get_image_data('ZYX', S=0, T=0, C=0)
-
-    # Wait but now it's not interpolated!! Oh snap! Does that matter?
-    # Actually we were never calculating the cell centroid based on
-    # the interpolated image... should we be? That would only throw off
-    # the z value I think?
-    label = int(row.label)
-    cell_img = np.nonzero(seg_img == label)
-    cell_centroid = center_of_mass(cell_img)
-    cell_centroid = np.subtract(cell_centroid, row.nm_centroid)
-
-    # Calculate alignment angle in xy plane
-    cell_img = cell_img.astype(np.uint8)
-    cell_img = cell_img * 255
-    z, y, x = np.nonzero(cell_img)
-
-    if args.make_unique:
-
-        # Calculate angle with atan2 to preserve orientation
-        # I think this SHOULD align to the 3 o' clock position?
-        angle = 180 * np.arctan2(cell_centroid[1], cell_centroid[2]) / np.pi
-
-        # Still don't fully understand what's going on in this section
-        # TODO: Write tests to ensure rotation is centered etc.
-        x_rot = (x - x.mean()) * np.cos(np.pi * angle / 180) + (
-                y - y.mean()) * np.sin(np.pi * angle / 180)
-        xsk = skew(x_rot)
-        if xsk < 0.0:
-            angle += 180
-        angle = angle % 360
-
-    else:
-
-        # Calculate smallest angle
-        angle = 0.0
-        if np.abs(cell_centroid[2]) > 1e-12:  # avoid divide by zero error ig?
-            angle = 180 * np.arctan(cell_centroid[1] / cell_centroid[2]) / np.pi
-
-    # Save angle matched to cell_id
-    cell_angles.append({'CellId': row.CellId, 'rotation_angle': angle})
 
 # Save angles to cell manifest
 angle_df = pd.DataFrame(cell_angles)
