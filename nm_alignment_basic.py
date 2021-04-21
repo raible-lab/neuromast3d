@@ -134,10 +134,11 @@ for fov in fov_df.itertuples(index=False):
                 angle = 180 * np.arctan(cell_centroid[1] / cell_centroid[2]) / np.pi
 
         # Save angle matched to cell_id
+        # TODO: Also save cell centroid
         cell_angles.append({'CellId': cell.CellId, 'rotation_angle': angle})
 
         # Apply alignment to single cell mask
-        reader = AICSImage(cell.crop_seg_path)
+        reader = AICSImage(cell.crop_seg)
         seg_cell = reader.get_image_data('ZYX', S=0, T=0, C=0)
 
         # Rotate function expects multichannel image
@@ -164,4 +165,4 @@ cell_df = cell_df.merge(fov_centroid_df, on='fov_id')
 # Save angles to cell manifest
 angle_df = pd.DataFrame(cell_angles)
 cell_df = cell_df.merge(angle_df, on='CellId')
-cell_df.to_csv(step_local_path / 'manifest.csv')
+cell_df.to_csv(f'{step_local_path}/manifest.csv')
