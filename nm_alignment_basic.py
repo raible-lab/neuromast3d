@@ -136,19 +136,26 @@ for fov in fov_df.itertuples(index=False):
         # Save angle matched to cell_id
         cell_angles.append({'CellId': cell.CellId, 'rotation_angle': angle})
 
-        # Apply alignment to cell
+        # Apply alignment to single cell mask
+        reader = AICSImage(cell.crop_seg_path)
+        seg_cell = reader.get_image_data('ZYX', S=0, T=0, C=0)
+
+        # Rotate function expects multichannel image
+        if seg_cell.ndim == 3:
+            seg_cell = np.expand_dims(seg_cell, axis=0)
         cell_aligned = rotate_image_2d(
-                image=cell_img,
+                image=seg_cell,
                 angle=angle,
                 interpolation_order=0
         )
 
         # Save aligned single cell mask
-        current_cell_dir = f'{step_local_path}/fov.fov_id/{label}'
+        current_cell_dir = f'{step_local_path}/{fov.fov_id}/{label}'
         pathlib.Path(current_cell_dir).mkdir(parents=True, exist_ok=True)
-        crop_seg_aligned_path = pathlib.Path(current_cell_dir / 'segmentation.ome.tif')
+        seg_path = f'{current_cell_dir}/segmentation.ome.tif'
+        crop_seg_aligned_path = pathlib.Path(seg_path)
         writer = ome_tiff_writer.OmeTiffWriter(crop_seg_aligned_path)
-        writer.save(cell_aligned, dimension_order='ZYX')
+        writer.save(cell_aligned, dimension_order='CZYX')
 
 # Add to cell_df
 fov_centroid_df = pd.DataFrame(nm_centroids)
