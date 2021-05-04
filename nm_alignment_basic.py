@@ -27,17 +27,21 @@ from utils import rotate_image_2d
 
 
 def calculate_alignment_angle_2d(
-        centroid: tuple,
+        image: np.array,
+        origin: tuple,
         make_unique: bool = False,
 ):
     # I think we need this to be a function for testing purposes
     # but this one doesn't make a whole lot of sense...
 
+    centroid = center_of_mass(image)
+    centroid_normed = np.subtract(centroid, origin)
+
     if make_unique:  # NOTE: modified from original in shparam!
 
         # Calculate angle with atan2 to preserve orientation
         # I think this SHOULD align to the 3 o' clock position?
-        angle = 180 * np.arctan2(centroid[1], centroid[2]) / np.pi
+        angle = 180 * np.arctan2(centroid_normed[1], centroid_normed[2]) / np.pi
 
     else:
 
@@ -46,7 +50,7 @@ def calculate_alignment_angle_2d(
         if np.abs(centroid[2]) > 1e-12:  # avoid divide by zero error ig?
             angle = 180 * np.arctan(centroid[1] / centroid[2]) / np.pi
 
-    return angle
+    return angle, centroid
 
 
 if __name__ == '__main__':
@@ -127,22 +131,23 @@ if __name__ == '__main__':
             # the z value I think? We'll try it here
             label = int(cell.label)
             cell_img = np.where(seg_img == label, seg_img, 0)
-            cell_centroid = center_of_mass(cell_img)
-            cell_centroid = np.subtract(cell_centroid, nm_centroid)
 
             # Calculate alignment angle in xy plane
             cell_img = cell_img.astype(np.uint8)
             cell_img = cell_img * 255
-            rotation_angle = calculate_alignment_angle_2d(
-                    centroid=cell_centroid,
+            rotation_angle, cell_centroid = calculate_alignment_angle_2d(
+                    image=cell_img,
+                    origin=nm_centroid,
                     make_unique=args.make_unique
             )
 
             # Save angle matched to cell_id
-            # TODO: Also save cell centroid
+            # Also saves cell centroid
             cell_angles.append({
                 'CellId': cell.CellId,
-                'rotation_angle': rotation_angle
+                'rotation_angle': rotation_angle,
+                'nm_centroid': nm_centroid,
+                'centroid': cell_centroid
             })
 
             # Apply alignment to single cell mask
