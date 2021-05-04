@@ -35,7 +35,7 @@ def calculate_alignment_angle_2d(
     # but this one doesn't make a whole lot of sense...
 
     centroid = center_of_mass(image)
-    centroid_normed = np.subtract(centroid, origin)
+    centroid_normed = np.subtract(origin, centroid)  # switched this again
 
     if make_unique:  # NOTE: modified from original in shparam!
 
