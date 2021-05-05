@@ -44,11 +44,6 @@ def test_rotate():
     expected[2, 3] = 1
     np.testing.assert_almost_equal(rot_img, expected)
 
-"""
-@pytest.mark.parametrize(
-        'input_centroid, expected_angle', [((0, 1, 0), 90), ((0, -1, 0), -90)]
-)
-"""
 
 @pytest.mark.parametrize(
         'origin, expected_angle', [
@@ -56,8 +51,8 @@ def test_rotate():
             ((11, 0, 0), -45),
             ((0, 11, 0), 0),
             ((0, 0, 11), -90),
-            ((0, 23, 0), 45),
-            ((0, 0, 23), -135),
+            ((0, 22, 0), 45),
+            ((0, 0, 22), -135),
             ((0, 23, 23), 135),
             ((0, 23, 11), 90)
         ]
