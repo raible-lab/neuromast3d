@@ -31,17 +31,21 @@ def calculate_alignment_angle_2d(
         origin: tuple,
         make_unique: bool = False,
 ):
-    # I think we need this to be a function for testing purposes
-    # but this one doesn't make a whole lot of sense...
+
+    if image.ndim != 3:
+        raise ValueError(f'Invalid shape of input image {image.shape}. \
+                Image must be a single-channel, 3D stack.')
 
     centroid = center_of_mass(image)
-    centroid_normed = np.subtract(origin, centroid)  # switched this again
+    centroid_normed = np.subtract(centroid, origin)
+    x = centroid_normed[2]
+    y = -centroid_normed[1]
 
     if make_unique:  # NOTE: modified from original in shparam!
 
         # Calculate angle with atan2 to preserve orientation
         # I think this SHOULD align to the 3 o' clock position?
-        angle = 180 * np.arctan2(centroid_normed[1], centroid_normed[2]) / np.pi
+        angle = 180 * np.arctan2(y, x) / np.pi
 
     else:
 
