@@ -6,6 +6,7 @@ from math import atan2
 
 import numpy as np
 import pytest
+from scipy.ndimage import center_of_mass
 from skimage.draw import ellipsoid
 from skimage.transform import rotate
 
@@ -43,12 +44,29 @@ def test_rotate():
     expected[2, 3] = 1
     np.testing.assert_almost_equal(rot_img, expected)
 
-
+"""
 @pytest.mark.parametrize(
         'input_centroid, expected_angle', [((0, 1, 0), 90), ((0, -1, 0), -90)]
 )
-def test_align_single_channel_image_2d(input_centroid, expected_angle):
-    angle = calculate_alignment_angle_2d(
-            centroid=input_centroid, make_unique=True
+"""
+
+@pytest.mark.parametrize(
+        'origin, expected_angle', [
+            ((0, 0, 0), -45),
+            ((11, 0, 0), -45),
+            ((0, 11, 0), 0),
+            ((0, 0, 11), -90),
+            ((0, 23, 0), 45),
+            ((0, 0, 23), -135),
+            ((0, 23, 23), 135),
+            ((0, 23, 11), 90)
+        ]
+)
+def test_calculate_alignment_angle_2d(origin, expected_angle):
+    image = ellipsoid(10, 10, 10)
+    angle, centroid = calculate_alignment_angle_2d(
+            image=image,
+            origin=origin,
+            make_unique=True
     )
     np.testing.assert_almost_equal(angle, expected_angle)
