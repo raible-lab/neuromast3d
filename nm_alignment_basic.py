@@ -48,7 +48,7 @@ def calculate_alignment_angle_2d(
         angle = 180 * np.arctan2(y, x) / np.pi
 
     else:
-
+        # TODO: update or remove? Don't think this is right anymore
         # Calculate smallest angle
         angle = 0.0
         if np.abs(centroid[2]) > 1e-12:  # avoid divide by zero error ig?
