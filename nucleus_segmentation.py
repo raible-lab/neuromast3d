@@ -7,7 +7,7 @@ Note: This scripts assumes a membrane channel is available as well.
 """
 
 import argparse
-from glob import glob
+import logging
 import os
 from pathlib import Path
 import sys
@@ -58,13 +58,22 @@ parser.add_argument('sigma', help='sigma to use for Gaussian blur of \
 parser.add_argument('min_distance', help='min_distance parameter for \
         peak_local_max function')
 
+# Parse and save as variables
 args = parser.parse_args()
-
 raw_dir = args.raw_dir
 mask_dir = args.mask_dir
 output_dir = args.output_dir
 sigma = args.sigma
 min_distance = args.min_distance
+
+# Save command line arguments into log file
+logger = logging.getLogger(__name__)
+logging.basicConfig(
+        filename=f'{output_dir}/nuc_seg.log',
+        level=logging.INFO,
+        format='%(asctime)s %(message)s'
+)
+logger.info(sys.argv)
 
 # Check raw and mask directories exist
 if not os.path.isdir(raw_dir):
@@ -117,7 +126,8 @@ for img_id in list_of_img_ids:
     raw_save_path = Path(f'{output_dir}/raw_nuc_labels/{img_id}_rawlabels.tiff')
     raw_save_path.mkdir(parents=True, exist_ok=True)
     writer = ome_tiff_writer.OmeTiffWriter(raw_save_path)
-    writer.save(ws_results, dimension_order='ZYX') 
+    writer.save(ws_results, dimension_order='ZYX')
+    logger.info('%s raw labels saved at %s', img_id, raw_save_path)
 
     # Inspect the results in the napari viewer
     viewer = napari.Viewer()
@@ -133,4 +143,6 @@ for img_id in list_of_img_ids:
     edited_save_path = Path(f'{output_dir}/raw_nuc_labels/{img_id}_editedlabels.tiff')
     writer = ome_tiff_writer.OmeTiffWriter(edited_save_path)
     writer.save(edited_labels, dimension_order='ZYX')
+    logger.info('%s edited labels saved at %s', img_id, edited_save_path)
 
+    break
