@@ -53,9 +53,9 @@ parser = argparse.ArgumentParser(
 parser.add_argument('raw_dir', help='directory containing raw input images')
 parser.add_argument('mask_dir', help='directory containing nuclear masks')
 parser.add_argument('output_dir', help='directory to save output labels')
-parser.add_argument('sigma', help='sigma to use for Gaussian blur of \
+parser.add_argument('sigma', type=int, help='sigma to use for Gaussian blur of \
         distance transform')
-parser.add_argument('min_distance', help='min_distance parameter for \
+parser.add_argument('min_distance', type=int, help='min_distance parameter for \
         peak_local_max function')
 
 # Parse and save as variables
@@ -63,17 +63,6 @@ args = parser.parse_args()
 raw_dir = args.raw_dir
 mask_dir = args.mask_dir
 output_dir = args.output_dir
-sigma = args.sigma
-min_distance = args.min_distance
-
-# Save command line arguments into log file
-logger = logging.getLogger(__name__)
-logging.basicConfig(
-        filename=f'{output_dir}/nuc_seg.log',
-        level=logging.INFO,
-        format='%(asctime)s %(message)s'
-)
-logger.info(sys.argv)
 
 # Check raw and mask directories exist
 if not os.path.isdir(raw_dir):
@@ -83,6 +72,20 @@ if not os.path.isdir(raw_dir):
 if not os.path.isdir(mask_dir):
     print('Mask directory does not exist')
     sys.exit()
+
+# Create output directory
+output_dir = Path(output_dir)
+output_dir.mkdir(parents=True, exist_ok=True)
+
+# Save command line arguments into log file
+logger = logging.getLogger(__name__)
+log_file_path = Path(f'{output_dir}/nuc_seg.log')
+logging.basicConfig(
+        filename=log_file_path,
+        level=logging.INFO,
+        format='%(asctime)s %(message)s'
+)
+logger.info(sys.argv)
 
 # Collect all image ids in raw directory
 list_of_img_ids = [fn.stem for fn in Path(raw_dir).glob('*.tiff')]
@@ -118,14 +121,14 @@ for img_id in list_of_img_ids:
     # Apply dt watershed
     ws_results = dt_watershed(
             nuclei_split,
-            sigma=sigma,
-            min_distance=min_distance
+            sigma=args.sigma,
+            min_distance=args.min_distance
     )
 
     # Save raw (unedited) labels
-    raw_save_path = Path(f'{output_dir}/raw_nuc_labels/{img_id}_rawlabels.tiff')
+    raw_save_path = Path(f'{output_dir}/raw_nuc_labels')
     raw_save_path.mkdir(parents=True, exist_ok=True)
-    writer = ome_tiff_writer.OmeTiffWriter(raw_save_path)
+    writer = ome_tiff_writer.OmeTiffWriter(raw_save_path/f'{img_id}_rawlabels.tiff')
     writer.save(ws_results, dimension_order='ZYX')
     logger.info('%s raw labels saved at %s', img_id, raw_save_path)
 
@@ -140,8 +143,9 @@ for img_id in list_of_img_ids:
 
     # Save edited labels from napari
     edited_labels = label_layer.data
-    edited_save_path = Path(f'{output_dir}/raw_nuc_labels/{img_id}_editedlabels.tiff')
-    writer = ome_tiff_writer.OmeTiffWriter(edited_save_path)
+    edited_save_path = Path(f'{output_dir}/edited_nuc_labels')
+    edited_save_path = mkdir(parents=True, exist_ok=True)
+    writer = ome_tiff_writer.OmeTiffWriter(edited_save_path/f'{img_id}_editedlabels.tiff')
     writer.save(edited_labels, dimension_order='ZYX')
     logger.info('%s edited labels saved at %s', img_id, edited_save_path)
 
