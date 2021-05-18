@@ -79,7 +79,7 @@ output_dir.mkdir(parents=True, exist_ok=True)
 
 # Save command line arguments into log file
 logger = logging.getLogger(__name__)
-log_file_path = Path(f'{output_dir}/nuc_seg.log')
+log_file_path = output_dir / 'nuc_seg.log'
 logging.basicConfig(
         filename=log_file_path,
         level=logging.INFO,
@@ -144,9 +144,7 @@ for img_id in list_of_img_ids:
     # Save edited labels from napari
     edited_labels = label_layer.data
     edited_save_path = Path(f'{output_dir}/edited_nuc_labels')
-    edited_save_path = mkdir(parents=True, exist_ok=True)
+    edited_save_path.mkdir(parents=True, exist_ok=True)
     writer = ome_tiff_writer.OmeTiffWriter(edited_save_path/f'{img_id}_editedlabels.tiff')
     writer.save(edited_labels, dimension_order='ZYX')
     logger.info('%s edited labels saved at %s', img_id, edited_save_path)
-
-    break
