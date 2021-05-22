@@ -93,6 +93,15 @@ list_of_img_ids = [fn.stem for fn in Path(raw_dir).glob('*.tiff')]
 # Loop over matching raw and mask images
 for img_id in list_of_img_ids:
 
+    # Check that edited labels haven't already been created
+    final_output_path = Path(
+            f'{output_dir}/edited_nuc_labels/{img_id}_editedlabels.tiff'
+    )
+
+    # If it does, go to next image
+    if final_output_path.exists():
+        continue
+
     # Read raw image
     path = Path(f'{raw_dir}/{img_id}.tiff')
     reader = AICSImage(path)
@@ -128,7 +137,10 @@ for img_id in list_of_img_ids:
     # Save raw (unedited) labels
     raw_save_path = Path(f'{output_dir}/raw_nuc_labels')
     raw_save_path.mkdir(parents=True, exist_ok=True)
-    writer = ome_tiff_writer.OmeTiffWriter(raw_save_path/f'{img_id}_rawlabels.tiff')
+    writer = ome_tiff_writer.OmeTiffWriter(
+            raw_save_path/f'{img_id}_rawlabels.tiff',
+            overwrite_file=True
+    )
     writer.save(ws_results, dimension_order='ZYX')
     logger.info('%s raw labels saved at %s', img_id, raw_save_path)
 
@@ -145,6 +157,8 @@ for img_id in list_of_img_ids:
     edited_labels = label_layer.data
     edited_save_path = Path(f'{output_dir}/edited_nuc_labels')
     edited_save_path.mkdir(parents=True, exist_ok=True)
-    writer = ome_tiff_writer.OmeTiffWriter(edited_save_path/f'{img_id}_editedlabels.tiff')
+    writer = ome_tiff_writer.OmeTiffWriter(
+            edited_save_path/f'{img_id}_editedlabels.tiff'
+    )
     writer.save(edited_labels, dimension_order='ZYX')
     logger.info('%s edited labels saved at %s', img_id, edited_save_path)
