@@ -166,14 +166,13 @@ for img_id in list_of_img_ids:
     # Check if the user wants to continue annotating the next image
     # If not, next time the script is run, it will use the logfile
     # To determine which image to start with
-    while True:
-        user_response = input(f'Edited labels for {img_id} saved. \
-                Would you like to continue with the next image? (y/n)')
-        if user_response == 'y':
-            print('Continuing with next image.')
-            continue
-        elif user_response == 'n':
-            print('Terminating annotations. Run this script again to resume.')
-            break
-        else:
-            print('Invalid input. Please enter y to continue or n to exit.')
+    user_response = input(f'Edited labels for {img_id} saved. \
+            Would you like to continue with the next image? (y/n)')
+    if user_response == 'y':
+        print('Continuing with next image.')
+        continue
+    elif user_response == 'n':
+        print('Terminating annotations. Run this script again to resume.')
+        break
+    else:
+        print('Invalid input. Please enter y to continue or n to exit.')
