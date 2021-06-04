@@ -161,19 +161,36 @@ if __name__ == '__main__':
             # Rotate function expects multichannel image
             if seg_cell.ndim == 3:
                 seg_cell = np.expand_dims(seg_cell, axis=0)
-            cell_aligned = rotate_image_2d(
+            seg_cell_aligned = rotate_image_2d(
                     image=seg_cell,
                     angle=rotation_angle,
                     interpolation_order=0
             )
 
-            # Save aligned single cell mask
+            # Also rotate raw image
+            reader = AICSImage(cell.crop_raw)
+            raw_cell = reader.get_image_data('ZYX', S=0, T=0, C=0)
+
+            if raw_cell.ndim == 3:
+                raw_cell = np.expand_dims(raw_cell, axis=0)
+            raw_cell_aligned = rotate_image_2d(
+                    image=raw_cell,
+                    angle=rotation_angle,
+                    interpolation_order=0
+            )
+
+            # Save aligned single cell mask and raw image
             current_cell_dir = f'{step_local_path}/{fov.fov_id}/{label}'
             pathlib.Path(current_cell_dir).mkdir(parents=True, exist_ok=True)
             seg_path = f'{current_cell_dir}/segmentation.ome.tif'
             crop_seg_aligned_path = pathlib.Path(seg_path)
             writer = ome_tiff_writer.OmeTiffWriter(crop_seg_aligned_path)
-            writer.save(cell_aligned, dimension_order='CZYX')
+            writer.save(seg_cell_aligned, dimension_order='CZYX')
+
+            raw_path = f'{current_cell_dir}/raw.ome.tif'
+            crop_raw_aligned_path = pathlib.Path(raw_path)
+            writer = ome_tiff_writer.OmeTiffWriter(crop_raw_aligned_path)
+            writer.save(raw_cell_aligned, dimension_order='CZYX')
 
     # Add to cell_df
     fov_centroid_df = pd.DataFrame(nm_centroids)
