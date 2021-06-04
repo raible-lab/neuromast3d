@@ -86,6 +86,14 @@ if __name__ == '__main__':
     # Read the manifest to align cells for this run
     cell_df = pd.read_csv(path_to_manifest, index_col=0)
 
+    # Since we are applying alignment, rename old crop_seg and crop_raw
+    # Because we want to use the aligned images in future steps
+    cell_df = cell_df.rename(columns={
+        'crop_raw': 'crop_raw_pre_alignment',
+        'crop_seg': 'crop_seg_pre_alignment'
+        }
+    )
+
     # Create dir to save for this step
     step_local_path = f'{project_dir}/alignment'
     pathlib.Path(step_local_path).mkdir(parents=True, exist_ok=True)
@@ -145,17 +153,8 @@ if __name__ == '__main__':
                     make_unique=args.make_unique
             )
 
-            # Save angle matched to cell_id
-            # Also saves cell centroid
-            cell_angles.append({
-                'CellId': cell.CellId,
-                'rotation_angle': rotation_angle,
-                'nm_centroid': nm_centroid,
-                'centroid': cell_centroid
-            })
-
             # Apply alignment to single cell mask
-            reader = AICSImage(cell.crop_seg)
+            reader = AICSImage(cell.crop_seg_pre_alignment)
             seg_cell = reader.get_image_data('ZYX', S=0, T=0, C=0)
 
             # Rotate function expects multichannel image
@@ -168,7 +167,7 @@ if __name__ == '__main__':
             )
 
             # Also rotate raw image
-            reader = AICSImage(cell.crop_raw)
+            reader = AICSImage(cell.crop_raw_pre_alignment)
             raw_cell = reader.get_image_data('ZYX', S=0, T=0, C=0)
 
             if raw_cell.ndim == 3:
@@ -191,6 +190,17 @@ if __name__ == '__main__':
             crop_raw_aligned_path = pathlib.Path(raw_path)
             writer = ome_tiff_writer.OmeTiffWriter(crop_raw_aligned_path)
             writer.save(raw_cell_aligned, dimension_order='CZYX')
+
+            # Save angle matched to cell_id
+            # Also saves cell centroid and paths for rotated single cells
+            cell_angles.append({
+                'CellId': cell.CellId,
+                'rotation_angle': rotation_angle,
+                'nm_centroid': nm_centroid,
+                'centroid': cell_centroid,
+                'crop_raw': raw_path,
+                'crop_seg': seg_path
+            })
 
     # Add to cell_df
     fov_centroid_df = pd.DataFrame(nm_centroids)
