@@ -13,6 +13,7 @@ AICS cvapipe repo. Please see https://github.com/AllenCell/cvapipe for details.
 
 import argparse
 import glob
+import logging
 import os
 import sys
 
@@ -22,6 +23,8 @@ import pandas as pd
 from aicsimageio import AICSImage, imread
 from aicsimageio.writers import ome_tiff_writer
 from aicsimageprocessing import resize, resize_to
+
+logger = logging.getLogger(__name__)
 
 # Command line arguments
 parser = argparse.ArgumentParser()
@@ -46,6 +49,15 @@ extension = args.extension
 dest_dir = args.dest
 z_res = args.z_res
 xy_res = args.xy_res
+
+# Save command line arguments into logfile
+log_file_path = f'{dest_dir}/prep_single_cells.log'
+logging.basicConfig(
+        filename=log_file_path,
+        level=logging.INFO,
+        format='%(asctime)s %(message)s'
+)
+logger.info(sys.argv)
 
 # Check that paths are valid
 if not os.path.isdir(raw_source_dir):

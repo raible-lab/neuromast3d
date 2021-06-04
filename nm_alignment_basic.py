@@ -8,6 +8,7 @@ and does not try to align cells to an organismal axis (e.g. A/P, D/V).
 """
 
 import argparse
+import logging
 import os
 import pathlib
 import sys
@@ -24,6 +25,8 @@ from skimage.transform import rotate
 from scipy.ndimage import center_of_mass
 
 from utils import rotate_image_2d
+
+logger = logging.getLogger(__name__)
 
 
 def calculate_alignment_angle_2d(
@@ -71,6 +74,7 @@ if __name__ == '__main__':
             action='store_true'
     )
 
+    # Parse args and assign to variables
     args = parser.parse_args()
 
     project_dir = args.project_dir
@@ -97,6 +101,15 @@ if __name__ == '__main__':
     # Create dir to save for this step
     step_local_path = f'{project_dir}/alignment'
     pathlib.Path(step_local_path).mkdir(parents=True, exist_ok=True)
+
+    # Save command line arguments to logfile for future reference
+    log_file_path = step_local_path / 'alignment.log'
+    logging.basicConfig(
+            filename=log_file_path,
+            level=logging.INFO,
+            format='%(asctime)s %(message)s'
+    )
+    logger.info(sys.argv)
 
     # Create fov dataframe
     fov_df = cell_df.copy()
