@@ -99,27 +99,10 @@ seg_df = pd.DataFrame(seg_img_names)
 fov_dataset = raw_df.merge(seg_df, on='NM_ID')
 fov_dataset.to_csv(f'{dest_dir}/fov_dataset.csv')
 
-# TODO: Check that new way of making initial fov_dataset works
-# Also consider whether intial fov_dataset creation should be its own script
-
-# Create unique cell_ids
-nm_id_list = []
-cell_id_list = []
-for seg_fn in seg_files:
-    nm_id = bn.rpartition('_')[0]
-    reader = AICSImage(seg_fn)
-    mem_seg_whole = reader.get_image_data('ZYX', S=0, T=0, C=0)
-    cell_label_list = list(np.unique(mem_seg_whole[mem_seg_whole > 0]))
-    for label in cell_label_list:
-        cell_id = f'{nm_id}_{label}'
-        cell_id_list = np.append(cell_id_list, cell_id)
-        nm_id_list = np.append(nm_id_list, nm_id)
-    break
+# TODO: should fov_dataset generation be its own script or function?
 
 # TODO: add single cell QC, for example remove cells based on size threshold
 # Min/max size could be passed via command line
-
-cell_dataset = pd.DataFrame({'NM_ID': nm_id_list, 'CellID': cell_id_list})
 
 # Create dir for single cell masks to go into
 if not os.path.exists(f'{dest_dir}/single_cell_masks'):
