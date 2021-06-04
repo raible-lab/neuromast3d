@@ -200,6 +200,7 @@ for row in fov_dataset.itertuples(index=False):
         cell_meta.append(
                 {
                     'CellId': cell_id,
+                    'label': label,
                     'roi': roi,
                     'crop_raw': crop_raw_path,
                     'crop_seg': crop_seg_path,

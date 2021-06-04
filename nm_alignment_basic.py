@@ -98,10 +98,6 @@ if __name__ == '__main__':
     step_local_path = f'{project_dir}/alignment'
     pathlib.Path(step_local_path).mkdir(parents=True, exist_ok=True)
 
-    # Add labels column (TODO: consider adding this step upstream)
-    cell_ids = cell_df['CellId']
-    cell_df['label'] = cell_ids.str.split('_', expand=True)[2]
-
     # Create fov dataframe
     fov_df = cell_df.copy()
     fov_df.drop_duplicates(subset=['fov_id'], keep='first', inplace=True)
