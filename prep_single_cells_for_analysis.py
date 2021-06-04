@@ -184,6 +184,19 @@ for row in fov_dataset.itertuples(index=False):
         writer = ome_tiff_writer.OmeTiffWriter(crop_raw_path)
         writer.save(raw_img, dimension_order='ZYX')
         cell_id = f'{row.NM_ID}_{label}'
+
+        # Add name dict
+        # NOTE: currently hardcoded. may need to change depending on run
+        name_dict = {
+                'crop_raw': ['membrane'],
+                'crop_seg': ['cell_seg'],
+        }
+
+        # If no structure name, need 'NA' as a placeholder for future steps
+        if 'Gene' in fov_dataset:
+            structure_name = row.Gene
+        else:
+            structure_name = 'NA'
         cell_meta.append(
                 {
                     'CellId': cell_id,
@@ -193,7 +206,9 @@ for row in fov_dataset.itertuples(index=False):
                     'scale_micron': [xy_res, xy_res, xy_res],
                     'fov_id': row.NM_ID,
                     'fov_path': row.SourceReadPath,
-                    'fov_seg_path': row.MembraneSegmentationReadPath
+                    'fov_seg_path': row.MembraneSegmentationReadPath,
+                    'name_dict': name_dict,
+                    'structure_name': structure_name
                 }
         )
 
