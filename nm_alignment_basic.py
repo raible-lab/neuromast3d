@@ -99,8 +99,8 @@ if __name__ == '__main__':
     )
 
     # Create dir to save for this step
-    step_local_path = f'{project_dir}/alignment'
-    pathlib.Path(step_local_path).mkdir(parents=True, exist_ok=True)
+    step_local_path = pathlib.Path(f'{project_dir}/alignment')
+    step_local_path.mkdir(parents=True, exist_ok=True)
 
     # Save command line arguments to logfile for future reference
     log_file_path = step_local_path / 'alignment.log'
@@ -114,7 +114,7 @@ if __name__ == '__main__':
     # Create fov dataframe
     fov_df = cell_df.copy()
     fov_df.drop_duplicates(subset=['fov_id'], keep='first', inplace=True)
-    fov_df.drop(['CellId', 'crop_raw', 'crop_seg', 'roi'], axis=1, inplace=True)
+    fov_df.drop(['CellId', 'crop_raw_pre_alignment', 'crop_seg_pre_alignment', 'roi'], axis=1, inplace=True)
 
     # Calculate neuromast centroid
     nm_centroids = []

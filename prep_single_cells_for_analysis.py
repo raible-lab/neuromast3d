@@ -81,8 +81,10 @@ seg_files = sorted(glob.glob(f'{seg_source_dir}/*.{extension}'))
 for fn in seg_files:
     bn = os.path.basename(fn)
     seg_img_name = bn.rpartition('_')[0]
-    if bn.rpartition('_')[2] == 'editedlabels.tiff':
-        seg_files.remove(f'{seg_source_dir}/{seg_img_name}_rawlabels.tiff')
+    raw_label_path = f'{seg_source_dir}/{seg_img_name}_rawlabels.tiff'
+    if 'editedlabels.tiff' in fn and os.path.isfile(raw_label_path):
+        print(raw_label_path)
+        seg_files.remove(raw_label_path)
 
 if not len(raw_files) == len(seg_files):
     print('Number of raw files does not match number of seg files.')
@@ -102,7 +104,7 @@ for fn in seg_files:
     seg_img_names.append(
             {
                 'NM_ID': seg_img_name,
-                'MembraneSegmentationReadPath': fn
+                'SegmentationReadPath': fn
             }
     )
 
@@ -130,7 +132,7 @@ for row in fov_dataset.itertuples(index=False):
         os.mkdir(current_fov_dir)
     reader_raw = AICSImage(row.SourceReadPath)
     raw_img = reader_raw.get_image_data('ZYX', S=0, T=0, C=0)
-    reader_seg = AICSImage(row.MembraneSegmentationReadPath)
+    reader_seg = AICSImage(row.SegmentationReadPath)
     seg_img = reader_seg.get_image_data('ZYX', S=0, T=0, C=0)
     raw_img_rescaled = resize(
             raw_img,
@@ -202,7 +204,7 @@ for row in fov_dataset.itertuples(index=False):
                     'scale_micron': [xy_res, xy_res, xy_res],
                     'fov_id': row.NM_ID,
                     'fov_path': row.SourceReadPath,
-                    'fov_seg_path': row.MembraneSegmentationReadPath,
+                    'fov_seg_path': row.SegmentationReadPath,
                     'name_dict': name_dict,
                     'structure_name': structure_name
                 }
