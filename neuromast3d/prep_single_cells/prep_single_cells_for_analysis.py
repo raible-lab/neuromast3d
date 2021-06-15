@@ -20,7 +20,7 @@ import sys
 import numpy as np
 import pandas as pd
 
-from aicsimageio import AICSImage, imread
+from aicsimageio import AICSImage
 from aicsimageio.writers import ome_tiff_writer
 from aicsimageprocessing import resize, resize_to
 
