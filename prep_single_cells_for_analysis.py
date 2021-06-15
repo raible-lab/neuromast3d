@@ -41,6 +41,16 @@ parser.add_argument(
         action='store_true'
 )
 
+# TODO: this way of handling doing one channel is kinda hacky
+parser.add_argument(
+        '-s',
+        '--single_channel_index',
+        type=int,
+        const=None,
+        help='if wanting to prepare single cells for only one channel of a '
+        'multichannel image, the channel index to use (e.g. 0)',
+)
+
 args = parser.parse_args()
 
 raw_source_dir = args.raw_dir
@@ -49,6 +59,8 @@ extension = args.extension
 dest_dir = args.dest
 z_res = args.z_res
 xy_res = args.xy_res
+if args.single_channel_index is not None:
+    ch_index = args.single_channel_index
 
 # Save command line arguments into logfile
 log_file_path = f'{dest_dir}/prep_single_cells.log'
@@ -131,7 +143,12 @@ for row in fov_dataset.itertuples(index=False):
     if not os.path.exists(current_fov_dir):
         os.mkdir(current_fov_dir)
     reader_raw = AICSImage(row.SourceReadPath)
-    raw_img = reader_raw.get_image_data('ZYX', S=0, T=0, C=0)
+
+    # TODO: another hack
+    if args.single_channel_index is not None:
+        raw_img = reader_raw.get_image_data('ZYX', S=0, T=0, C=ch_index)
+    else:
+        raw_img = reader_raw.get_image_data('ZYX', S=0, T=0, C=0)
     reader_seg = AICSImage(row.SegmentationReadPath)
     seg_img = reader_seg.get_image_data('ZYX', S=0, T=0, C=0)
     raw_img_rescaled = resize(
