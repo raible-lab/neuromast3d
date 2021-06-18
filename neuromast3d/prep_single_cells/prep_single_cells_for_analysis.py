@@ -13,15 +13,18 @@ AICS cvapipe repo. Please see https://github.com/AllenCell/cvapipe for details.
 
 import argparse
 import glob
+import logging
 import os
 import sys
 
 import numpy as np
 import pandas as pd
 
-from aicsimageio import AICSImage, imread
+from aicsimageio import AICSImage
 from aicsimageio.writers import ome_tiff_writer
 from aicsimageprocessing import resize, resize_to
+
+logger = logging.getLogger(__name__)
 
 # Command line arguments
 parser = argparse.ArgumentParser()
@@ -38,6 +41,16 @@ parser.add_argument(
         action='store_true'
 )
 
+# TODO: this way of handling doing one channel is kinda hacky
+parser.add_argument(
+        '-s',
+        '--single_channel_index',
+        type=int,
+        const=None,
+        help='if wanting to prepare single cells for only one channel of a '
+        'multichannel image, the channel index to use (e.g. 0)',
+)
+
 args = parser.parse_args()
 
 raw_source_dir = args.raw_dir
@@ -46,6 +59,17 @@ extension = args.extension
 dest_dir = args.dest
 z_res = args.z_res
 xy_res = args.xy_res
+if args.single_channel_index is not None:
+    ch_index = args.single_channel_index
+
+# Save command line arguments into logfile
+log_file_path = f'{dest_dir}/prep_single_cells.log'
+logging.basicConfig(
+        filename=log_file_path,
+        level=logging.INFO,
+        format='%(asctime)s %(message)s'
+)
+logger.info(sys.argv)
 
 # Check that paths are valid
 if not os.path.isdir(raw_source_dir):
@@ -69,8 +93,10 @@ seg_files = sorted(glob.glob(f'{seg_source_dir}/*.{extension}'))
 for fn in seg_files:
     bn = os.path.basename(fn)
     seg_img_name = bn.rpartition('_')[0]
-    if bn.rpartition('_')[2] == 'editedlabels.tiff':
-        seg_files.remove(f'{seg_source_dir}/{seg_img_name}_rawlabels.tiff')
+    raw_label_path = f'{seg_source_dir}/{seg_img_name}_rawlabels.tiff'
+    if 'editedlabels.tiff' in fn and os.path.isfile(raw_label_path):
+        print(raw_label_path)
+        seg_files.remove(raw_label_path)
 
 if not len(raw_files) == len(seg_files):
     print('Number of raw files does not match number of seg files.')
@@ -90,7 +116,7 @@ for fn in seg_files:
     seg_img_names.append(
             {
                 'NM_ID': seg_img_name,
-                'MembraneSegmentationReadPath': fn
+                'SegmentationReadPath': fn
             }
     )
 
@@ -99,27 +125,10 @@ seg_df = pd.DataFrame(seg_img_names)
 fov_dataset = raw_df.merge(seg_df, on='NM_ID')
 fov_dataset.to_csv(f'{dest_dir}/fov_dataset.csv')
 
-# TODO: Check that new way of making initial fov_dataset works
-# Also consider whether intial fov_dataset creation should be its own script
-
-# Create unique cell_ids
-nm_id_list = []
-cell_id_list = []
-for seg_fn in seg_files:
-    nm_id = bn.rpartition('_')[0]
-    reader = AICSImage(seg_fn)
-    mem_seg_whole = reader.get_image_data('ZYX', S=0, T=0, C=0)
-    cell_label_list = list(np.unique(mem_seg_whole[mem_seg_whole > 0]))
-    for label in cell_label_list:
-        cell_id = f'{nm_id}_{label}'
-        cell_id_list = np.append(cell_id_list, cell_id)
-        nm_id_list = np.append(nm_id_list, nm_id)
-    break
+# TODO: should fov_dataset generation be its own script or function?
 
 # TODO: add single cell QC, for example remove cells based on size threshold
 # Min/max size could be passed via command line
-
-cell_dataset = pd.DataFrame({'NM_ID': nm_id_list, 'CellID': cell_id_list})
 
 # Create dir for single cell masks to go into
 if not os.path.exists(f'{dest_dir}/single_cell_masks'):
@@ -134,8 +143,13 @@ for row in fov_dataset.itertuples(index=False):
     if not os.path.exists(current_fov_dir):
         os.mkdir(current_fov_dir)
     reader_raw = AICSImage(row.SourceReadPath)
-    raw_img = reader_raw.get_image_data('ZYX', S=0, T=0, C=0)
-    reader_seg = AICSImage(row.MembraneSegmentationReadPath)
+
+    # TODO: another hack
+    if args.single_channel_index is not None:
+        raw_img = reader_raw.get_image_data('ZYX', S=0, T=0, C=ch_index)
+    else:
+        raw_img = reader_raw.get_image_data('ZYX', S=0, T=0, C=0)
+    reader_seg = AICSImage(row.SegmentationReadPath)
     seg_img = reader_seg.get_image_data('ZYX', S=0, T=0, C=0)
     raw_img_rescaled = resize(
             raw_img,
@@ -184,16 +198,32 @@ for row in fov_dataset.itertuples(index=False):
         writer = ome_tiff_writer.OmeTiffWriter(crop_raw_path)
         writer.save(raw_img, dimension_order='ZYX')
         cell_id = f'{row.NM_ID}_{label}'
+
+        # Add name dict
+        # NOTE: currently hardcoded. may need to change depending on run
+        name_dict = {
+                'crop_raw': ['membrane'],
+                'crop_seg': ['cell_seg'],
+        }
+
+        # If no structure name, need 'NA' as a placeholder for future steps
+        if 'Gene' in fov_dataset:
+            structure_name = row.Gene
+        else:
+            structure_name = 'NA'
         cell_meta.append(
                 {
                     'CellId': cell_id,
+                    'label': label,
                     'roi': roi,
                     'crop_raw': crop_raw_path,
                     'crop_seg': crop_seg_path,
                     'scale_micron': [xy_res, xy_res, xy_res],
                     'fov_id': row.NM_ID,
                     'fov_path': row.SourceReadPath,
-                    'fov_seg_path': row.MembraneSegmentationReadPath
+                    'fov_seg_path': row.SegmentationReadPath,
+                    'name_dict': name_dict,
+                    'structure_name': structure_name
                 }
         )
 
