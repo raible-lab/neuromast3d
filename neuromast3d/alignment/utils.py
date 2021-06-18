@@ -4,6 +4,7 @@
 from aicsimageio import AICSImage
 import numpy as np
 from skimage.transform import rotate
+from sklearn.decomposition import PCA
 
 
 def rotate_image_2d(image: np.array, angle: float, interpolation_order: int = 0):
@@ -48,9 +49,12 @@ def angle_between(v1, v2):
     return angle
 
 
+def get_membrane_segmentation(path_to_seg):
+    seg_mem = AICSImage(path_to_seg).data.squeeze()
+    return seg_mem
+
+
 def prepare_vector_for_napari(vector, origin, scale=1):
-    # Not currently used in the alignment scripts
-    # but may be useful for dev purposes?
     if len(vector.shape) < 2:
         vector = np.expand_dims(vector, axis=0)
     elif len(vector.shape) == 2:
@@ -66,6 +70,36 @@ def prepare_vector_for_napari(vector, origin, scale=1):
     return napari_vector
 
 
-def get_membrane_segmentation(path_to_seg):
-    seg_mem = AICSImage(path_to_seg).data.squeeze()
-    return seg_mem
+def find_major_axis_by_pca(image, threed=False):
+    if threed:
+
+        # Find three major axes
+        pca = PCA(n_components=3)
+
+        # image = image.reshape(1, *image.shape)
+
+        # Find coordinates where image has a nonzero value (i.e. is not bg)
+        # Assumes image has been read in by ZYX dimension order
+        z, y, x = np.nonzero(image)
+
+        # The 'xyz' object has final shape (N, 3) where N is the number
+        # of coordinates where the image has a nonzero value and the three
+        # columns coorrespond to x, y, and z coordinates respectively
+        xyz = np.hstack([x.reshape(-1, 1), y.reshape(-1, 1), z.reshape(-1, 1)])
+
+        # Major axes returned as ndarray of shape (3, 3)
+        # Each row vector = a major axis, arranged in descending order
+        # Each column corresponds to x, y, and z values respectively
+        pca = pca.fit(xyz)
+        eigenvecs = pca.components_
+
+    else:
+        pca = PCA(n_components=2)
+        # image = image.reshape(1, *image.shape)
+        print(image.shape)
+        z, y, x = np.nonzero(image)
+        xy = np.hstack([x.reshape(-1, 1), y.reshape(-1, 1)])
+        pca = pca.fit(xy)
+        eigenvecs = pca.components_
+    return eigenvecs
+

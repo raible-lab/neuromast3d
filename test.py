@@ -10,9 +10,8 @@ from scipy.ndimage import center_of_mass
 from skimage.draw import ellipsoid
 from skimage.transform import rotate
 
-from nm_alignment_by_pca import find_major_axis_by_pca
-from nm_alignment_basic import calculate_alignment_angle_2d
-from utils import rotate_image_2d
+from neuromast3d.alignment.utils import find_major_axis_by_pca, rotate_image_2d
+from neuromast3d.alignment.nm_alignment_basic import calculate_alignment_angle_2d
 
 
 def test_find_major_axis_by_pca():
