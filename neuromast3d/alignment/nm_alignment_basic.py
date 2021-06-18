@@ -24,7 +24,7 @@ from skimage.measure import regionprops
 from skimage.transform import rotate
 from scipy.ndimage import center_of_mass
 
-from utils import rotate_image_2d
+from neuromast3d.alignment.utils import rotate_image_2d
 
 logger = logging.getLogger(__name__)
 
