@@ -14,16 +14,19 @@ import logging
 import os
 from pathlib import Path
 import sys
+from typing import List, Tuple, Union
 
 from aicsimageio import AICSImage
 from aicsimageio.writers import ome_tiff_writer
 from magicgui import magicgui
 import napari
-from napari.layers import Image, Layer
+from napari.layers import Image, Labels, Layer, Points
+from napari.types import LabelsData
 import numpy as np
 from scipy import ndimage as ndi
 from skimage import morphology, filters
 from skimage.feature import peak_local_max
+from skimage.measure import regionprops
 from skimage.segmentation import watershed
 
 
@@ -49,24 +52,39 @@ def clear_layers(layer: Layer):
 
 
 raw_dir = Path('/home/maddy/projects/claudin_gfp_5dpf_DRAQ5_1h_airy_live/stack_aligned')
+nuc_labels_dir = Path('/home/maddy/projects/claudin_gfp_5dpf_DRAQ5_1h_airy_live/labels/edited_nuc_labels')
+mem_labels_dir = Path('/home/maddy/projects/claudin_gfp_5dpf_DRAQ5_1h_airy_live/claudin_model_iter2_results')
 list_of_img_ids = [fn.stem for fn in Path(raw_dir).glob('*.tiff')]
 
 
 @magicgui(call_button='Open next image', img_id={'choices': list_of_img_ids})
-def open_next_image(img_id) -> Image:
+def open_next_image(img_id) -> List[napari.types.LayerDataTuple]:
     reader = AICSImage(f'{raw_dir}/{img_id}.tiff')
     image = reader.get_image_data('CZYX', S=0, T=0)
-    return Image(image, name='My Image')
+
+    reader = AICSImage(f'{nuc_labels_dir}/{img_id}_editedlabels.tiff')
+    nuc_labels = reader.get_image_data('ZYX', C=0, S=0, T=0)
+
+    reader = AICSImage(f'{mem_labels_dir}/{img_id}_struct_segmentation.tiff')
+    mem_labels = reader.get_image_data('ZYX', C=0, S=0, T=0)
+    return [(image, {'name': 'raw'}, 'image'),
+            (nuc_labels, {'name': 'nuc_labels'}, 'labels'),
+            (mem_labels, {'name': 'mem_labels'}, 'image')]
 
 
-img_id = list_of_img_ids[0]
-path = f'{raw_dir}/{img_id}.tiff'
+@magicgui(call_button='Generate seeds')
+def generate_seeds_from_nuclei(nuc_labels_layer: LabelsData) -> Points:
+    if viewer.layers['nuc_labels']:
+        seeds = []
+        for region in regionprops(nuc_labels_layer):
+            seeds.append(np.round(region['centroid']))
 
-reader = AICSImage(path)
-img = reader.get_image_data('CZYX', S=0, T=0)
-viewer.add_image(img)
+        return Points(seeds)
+
+
 viewer.window.add_dock_widget(clear_layers)
 viewer.window.add_dock_widget(open_next_image)
+viewer.window.add_dock_widget(generate_seeds_from_nuclei)
 
 napari.run()
 '''
