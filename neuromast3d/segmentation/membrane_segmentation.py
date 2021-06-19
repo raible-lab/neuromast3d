@@ -46,7 +46,7 @@ def save_labels_layer(viewer):
 
 
 @magicgui(call_button='Clear current viewer')
-def clear_layers(layer: Layer):
+def clear_layers():
     if viewer.layers:
         viewer.layers.clear()
 
@@ -59,6 +59,8 @@ list_of_img_ids = [fn.stem for fn in Path(raw_dir).glob('*.tiff')]
 
 @magicgui(call_button='Open next image', img_id={'choices': list_of_img_ids})
 def open_next_image(img_id) -> List[napari.types.LayerDataTuple]:
+    '''Opens corresponding raw image, nuclear labels, and mem predictions'''
+
     reader = AICSImage(f'{raw_dir}/{img_id}.tiff')
     image = reader.get_image_data('CZYX', S=0, T=0)
 
@@ -69,7 +71,7 @@ def open_next_image(img_id) -> List[napari.types.LayerDataTuple]:
     mem_labels = reader.get_image_data('ZYX', C=0, S=0, T=0)
     return [(image, {'name': 'raw'}, 'image'),
             (nuc_labels, {'name': 'nuc_labels'}, 'labels'),
-            (mem_labels, {'name': 'mem_labels'}, 'image')]
+            (mem_labels, {'name': 'mem_predictions'}, 'image')]
 
 
 @magicgui(call_button='Generate seeds')
@@ -82,9 +84,27 @@ def generate_seeds_from_nuclei(nuc_labels_layer: LabelsData) -> Points:
         return Points(seeds)
 
 
-viewer.window.add_dock_widget(clear_layers)
-viewer.window.add_dock_widget(open_next_image)
-viewer.window.add_dock_widget(generate_seeds_from_nuclei)
+@magicgui(call_button='Run seeded watershed')
+def run_seeded_watershed(boundaries: Image, seed_dilation_radius: int = 5) -> Labels:
+    if viewer.layers['Points']:
+        seeds = viewer.layers['Points'].data
+        mem_pred_data = boundaries.data
+        mask = np.zeros(mem_pred_data.shape, dtype=bool)
+        mask[tuple(seeds.astype(int).T)] = True
+        markers, _ = ndi.label(mask)
+        markers = morphology.dilation(
+                markers,
+                selem=morphology.ball(seed_dilation_radius)
+        )
+        labels = watershed(mem_pred_data, markers)
+
+    return Labels(labels)
+
+
+viewer.window.add_dock_widget(clear_layers, area='right')
+viewer.window.add_dock_widget(open_next_image, area='right')
+viewer.window.add_dock_widget(generate_seeds_from_nuclei, area='right')
+viewer.window.add_dock_widget(run_seeded_watershed, area='right')
 
 napari.run()
 '''
