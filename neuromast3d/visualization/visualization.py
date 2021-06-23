@@ -22,17 +22,27 @@ from tifffile import imread
 
 # Start by reading in a manifest prepared by cvapipe_analysis
 path_to_manifest = Path('/home/maddy/projects/claudin_gfp_5dpf_airy_live/cvapipe_run_3/local_staging/shapemode/manifest.csv')
-df = pd.read_csv(path_to_manifest, index_col='CellId')
+df_ss = pd.read_csv(path_to_manifest, index_col='CellId')
+X = df_ss.values
+feature_cols = df_ss.columns[-8:].tolist()
+
 
 # Attempt at creating interactive plot
-X = df.values
-xs = df['MEM_PC1']
-ys = df['MEM_PC2']
-
-mpl_fig = plt.figure()
-ax = mpl_fig.add_subplot(111)
-ax.set_title('click on points to explore the data')
-line, = ax.plot(xs, ys, 'o', picker=True, pickradius=5)
+@magicgui(
+        call_button='Create plot',
+        df={'bind': df_ss},
+        xcol={'choices': feature_cols},
+        ycol={'choices': feature_cols},
+        result_widget=True
+)
+def create_interactive_plot(df, xcol, ycol):
+    xs = df[f'{xcol}']
+    ys = df[f'{ycol}']
+    mpl_fig = plt.figure()
+    ax = mpl_fig.add_subplot(111)
+    ax.set_title('click on points to explore the data')
+    line, = ax.plot(xs, ys, 'o', picker=True, pickradius=5)
+    return mpl_fig
 
 
 # Function for onpick event
@@ -44,11 +54,15 @@ def onpick(event):
     viewer.add_image(image)
 
 
-mpl_fig.canvas.mpl_connect('pick_event', onpick)
-
 viewer = napari.Viewer()
+mpl_fig = create_interactive_plot(df_ss, feature_cols[0], feature_cols[1])
+mpl_fig.canvas.mpl_connect('pick_event', onpick)
 
 # Add the figure to the viewer as a FigureCanvas widget
 viewer.window.add_dock_widget(FigureCanvas(mpl_fig))
+
+# TODO: make it possible to create new plot with dropdown menu
+# (this line adds a widget to do so but it doesn't function)
+viewer.window.add_dock_widget(create_interactive_plot)
 
 napari.run()
