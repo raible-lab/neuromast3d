@@ -16,15 +16,30 @@ from magicgui import magicgui
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_qt5agg import FigureCanvas
 import pandas as pd
+import phenograph
 import seaborn as sns
 from tifffile import imread
+import umap
 
 
 # Start by reading in a manifest prepared by cvapipe_analysis
 path_to_manifest = Path('/home/maddy/projects/claudin_gfp_5dpf_airy_live/cvapipe_run_3/local_staging/shapemode/manifest.csv')
 df_ss = pd.read_csv(path_to_manifest, index_col='CellId')
 X = df_ss.values
-feature_cols = df_ss.columns[-8:].tolist()
+
+# Subset df by pcs
+df_pcs = df_ss.iloc[:, -8:]
+
+# Using phenograph clustering method
+communities, graph, Q = phenograph.cluster(df_pcs, clustering_algo='leiden')
+
+# Make UMAP embedding for 2D visualization
+embedding = umap.UMAP().fit_transform(df_pcs)
+embedding_df = pd.DataFrame(embedding, index=df_pcs.index, columns=['UMAP_1', 'UMAP_2'])
+embedding_df['cluster'] = communities
+
+df_ss = pd.merge(df_ss, embedding_df, left_index=True, right_index=True)
+feature_cols = df_ss.columns[-11:].tolist()
 
 
 # Attempt at creating interactive plot
@@ -49,13 +64,12 @@ def create_interactive_plot(df, xcol, ycol):
 def onpick(event):
     ind = event.ind
     seg_path = X[ind, 1]
-    print(seg_path)
     image = imread(seg_path)
     viewer.add_image(image)
 
 
 viewer = napari.Viewer()
-mpl_fig = create_interactive_plot(df_ss, feature_cols[0], feature_cols[1])
+mpl_fig = create_interactive_plot(df_ss, feature_cols[-3], feature_cols[-2])
 mpl_fig.canvas.mpl_connect('pick_event', onpick)
 
 # Add the figure to the viewer as a FigureCanvas widget
