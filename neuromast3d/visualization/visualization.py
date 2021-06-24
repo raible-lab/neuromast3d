@@ -56,7 +56,9 @@ def create_interactive_plot(df, xcol, ycol):
     mpl_fig = plt.figure()
     ax = mpl_fig.add_subplot(111)
     ax.set_title('click on points to explore the data')
-    line, = ax.plot(xs, ys, 'o', picker=True, pickradius=5)
+    line = sns.scatterplot(xs, ys, hue=df['cluster'], picker=True, pickradius=5, palette='deep')
+
+    # line, = ax.plot(xs, ys, 'o', picker=True, pickradius=5)
     return mpl_fig
 
 
