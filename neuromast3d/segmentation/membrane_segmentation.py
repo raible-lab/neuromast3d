@@ -26,7 +26,7 @@ from scipy import ndimage as ndi
 from skimage import morphology, filters
 from skimage.feature import peak_local_max
 from skimage.measure import regionprops
-from skimage.segmentation import watershed
+from skimage.segmentation import find_boundaries, watershed
 
 
 # Command line arguments
@@ -109,9 +109,7 @@ def save_layer(
     '''Save selected layer to output directory.'''
 
     if img_id is not None:
-
         if finished:
-
             # Save to output dir and log this id as finished
             save_path = output_dir / f'{img_id}_{labels_layer.name}_finished.tiff'
             writer = ome_tiff_writer.OmeTiffWriter(save_path)
@@ -124,7 +122,6 @@ def save_layer(
             )
 
         else:
-
             # Save temporary results, overwriting any already in the output_dir
             save_path = output_dir / f'{img_id}_{labels_layer.name}_temp.tiff'
             writer = ome_tiff_writer.OmeTiffWriter(save_path, overwrite_file=True)
@@ -135,6 +132,7 @@ def save_layer(
                     labels_layer.name,
                     save_path
             )
+
     return
 
 
@@ -152,8 +150,8 @@ def generate_seeds_from_nuclei(nuc_labels_layer: LabelsData) -> Points:
 @magicgui(call_button='Run seeded watershed')
 def run_seeded_watershed(
         boundaries: Image,
-        seed_dilation_radius: int = 5
-) -> Labels:
+        seed_dilation_radius: int = 5,
+) -> napari.types.LayerDataTuple:
     '''Run watershed using passed Points layer as seeds.'''
     if viewer.layers['Points']:
         seeds = viewer.layers['Points'].data
@@ -167,13 +165,23 @@ def run_seeded_watershed(
         )
         labels = watershed(mem_pred_data, markers)
 
-    return Labels(labels, name='cell_labels')
+    return (labels, {'name': 'cell_labels'}, 'labels')
+
+
+@magicgui(call_button='Create watershed lines')
+def create_watershed_lines(labels: Labels) -> Image:
+    '''Find boundaries of cell labels'''
+    if viewer.layers['cell_labels']:
+        watershed_lines = find_boundaries(labels.data)
+
+    return Image(watershed_lines)
 
 
 viewer.window.add_dock_widget(clear_layers, area='right')
 viewer.window.add_dock_widget(open_next_image, area='right')
 viewer.window.add_dock_widget(generate_seeds_from_nuclei, area='right')
 viewer.window.add_dock_widget(run_seeded_watershed, area='right')
+viewer.window.add_dock_widget(create_watershed_lines, area='right')
 viewer.window.add_dock_widget(save_layer, area='right')
 
 napari.run()
