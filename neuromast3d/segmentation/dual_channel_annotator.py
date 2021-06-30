@@ -79,8 +79,8 @@ def clear_layers():
     return
 
 
-@magicgui(call_button='Open next image', img_id={'choices': list_of_img_ids})
-def open_next_image(img_id) -> List[napari.types.LayerDataTuple]:
+@magicgui(call_button='Open next image', img_id={'choices': list_of_img_ids},)
+def open_next_image(img_id, use_temp: bool = True) -> List[napari.types.LayerDataTuple]:
     '''Opens corresponding raw image, nuclear labels, and mem predictions'''
 
     # Open raw image
@@ -90,6 +90,15 @@ def open_next_image(img_id) -> List[napari.types.LayerDataTuple]:
     # Open nuclear labels
     reader = AICSImage(f'{nuc_labels_dir}/{img_id}_editedlabels.tiff')
     nuc_labels = reader.get_image_data('ZYX', C=0, S=0, T=0)
+    cell_labels = np.zeros_like(nuc_labels.shape)
+
+    if use_temp:
+        try:
+            reader = AICSImage(f'{output_dir}/{img_id}_temp.tiff')
+            nuc_labels = reader.get_image_data('ZYX', C=0, S=0, T=0)
+            cell_labels = reader.get_image_data('ZYX', C=1, S=0, T=0)
+        except FileNotFoundError:
+            print('Temp file not found, falling back to original')
 
     # Open mem predictions
     reader = AICSImage(f'{mem_pred_dir}/{img_id}_struct_segmentation.tiff')
@@ -97,39 +106,44 @@ def open_next_image(img_id) -> List[napari.types.LayerDataTuple]:
 
     return [(image, {'name': 'raw', 'blending': 'additive'}, 'image'),
             (nuc_labels, {'name': 'nuc_labels'}, 'labels'),
-            (mem_labels, {'name': 'mem_predictions', 'blending': 'additive'}, 'image')]
+            (mem_labels, {'name': 'mem_predictions', 'blending': 'additive'}, 'image'),
+            (cell_labels, {'name': 'cell_labels'}, 'labels')]
 
 
-@magicgui(call_button='Save result to output dir')
+@magicgui(call_button='Save result to output dir', img_id={'choices': list_of_img_ids})
 def save_layer(
-        labels_layer: Labels,
+        nuc_labels_layer: Labels,
+        cell_labels_layer: Labels,
         img_id: Union[str, None] = open_next_image.img_id.value,
         finished: bool = False
 ):
-    '''Save selected layer to output directory.'''
+    '''Save selected layers to output directory as multichannel image.'''
 
     if img_id is not None:
+        # Merge the two labels into a multichannel image
+        nuc_labels_data = np.expand_dims(nuc_labels_layer.data, axis=0)
+        cell_labels_data = np.expand_dims(cell_labels_layer.data, axis=0)
+        merged_labels = np.concatenate(nuc_labels_data, cell_labels_data, axis=0)
+
         if finished:
             # Save to output dir and log this id as finished
-            save_path = output_dir / f'{img_id}_{labels_layer.name}_finished.tiff'
+            save_path = output_dir / f'{img_id}_finished.tiff'
             writer = ome_tiff_writer.OmeTiffWriter(save_path)
-            writer.save(labels_layer.data, dimension_order='ZYX')
+            writer.save(merged_labels, dimension_order='ZYX')
             logger.info(
-                    '%s final results for %s saved at %s',
+                    '%s final results saved at %s',
                     img_id,
-                    labels_layer.name,
                     save_path
             )
 
         else:
             # Save temporary results, overwriting any already in the output_dir
-            save_path = output_dir / f'{img_id}_{labels_layer.name}_temp.tiff'
+            save_path = output_dir / f'{img_id}_temp.tiff'
             writer = ome_tiff_writer.OmeTiffWriter(save_path, overwrite_file=True)
-            writer.save(labels_layer.data, dimension_order='ZYX')
+            writer.save(merged_labels, dimension_order='ZYX')
             logger.info(
-                    '%s temp results for %s saved at %s',
+                    '%s temp results saved at %s',
                     img_id,
-                    labels_layer.name,
                     save_path
             )
 
@@ -150,7 +164,8 @@ def generate_seeds_from_nuclei(nuc_labels_layer: LabelsData) -> Points:
 @magicgui(call_button='Run seeded watershed')
 def run_seeded_watershed(
         boundaries: Image,
-        seed_dilation_radius: int = 5,
+        seed_dilation_radius: int = 10,
+        connectivity: int = 2
 ) -> napari.types.LayerDataTuple:
     '''Run watershed using passed Points layer as seeds.'''
     if viewer.layers['Points']:
@@ -163,7 +178,7 @@ def run_seeded_watershed(
                 markers,
                 selem=morphology.ball(seed_dilation_radius)
         )
-        labels = watershed(mem_pred_data, markers)
+        labels = watershed(mem_pred_data, markers, connectivity=connectivity)
 
     return (labels, {'name': 'cell_labels'}, 'labels')
 
