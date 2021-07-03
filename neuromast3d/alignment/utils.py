@@ -58,7 +58,8 @@ def rotate_image_2d_custom(
                     image=z_slice,
                     angle=angle,
                     order=interpolation_order,
-                    resize=True
+                    resize=True,
+                    preserve_range=True
             )
             ch_aligned.append(z_slice_aligned)
         ch_aligned = np.array(ch_aligned)
