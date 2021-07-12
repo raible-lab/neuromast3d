@@ -32,8 +32,41 @@ logger = logging.getLogger(__name__)
 def calculate_alignment_angle_2d(
         image: np.array,
         origin: tuple,
-        make_unique: bool = False,
+        make_unique: bool = True
 ):
+    """Calculate 2d alignment angle for a cell compared to a user-defined
+    origin to use as the axis of rotation. The centroid of the image is
+    calculated and the origin is subtracted from it to produce a vector
+    describing the location of the cell centroid compared to the origin in
+    the xy-plane. The rotation angle between this vector and the x-axis
+    (3 o'clock position) is then calculated.
+
+    Parameters
+    ----------
+    image : np.array
+        The input image to be rotated. Must be a single channel, 3D stack.
+        The centroid of this image will be calculated for the rotation.
+
+    origin : tuple
+        The origin around which to perform the rotation. Must be a 3-tuple in
+        dimension order z, y, x. Only the x and y coordinates are actually
+        used for the rotation.
+
+    make_unique : bool, optional
+        Whether to use the arctan2 function for the rotation, which
+        preserves information about the original orientation of the cell.
+        Default True.
+
+    Returns
+    -------
+    Tuple[float, np.array]
+        The angle for rotation and the image centroid after subtracting
+        the defined origin. The sign of the angle can be positive or negative,
+        depending on where the cell centroid was relative to the origin.
+        Cells with positive angles should be rotated CW, and those with
+        negative angles should be rotated CCW.
+
+    """
 
     if image.ndim != 3:
         raise ValueError(f'Invalid shape of input image {image.shape}. \
