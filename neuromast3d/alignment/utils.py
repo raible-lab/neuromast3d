@@ -17,20 +17,29 @@ def rotate_image_2d_custom(
 
     Parameters
     ----------
-    image: np.array
+    image : np.array
         The image to be rotated. Must have ndims == 4.
         The dimension order expected is CZYX.
-    angle: float
+
+    angle : float
         The rotation angle to apply to the image. If the sign is positive,
         the rotation will be counterclockwise, as is default for
         skimage.rotate. If the sign is negative, the rotation will be
         clockwise.
-    interpolation_order: int
+
+    interpolation_order : int
         Interpolation order argument passed to skimage.rotate function.
         Must be an integer. Default is 0.
-    flip_angle_sign: bool
+
+    flip_angle_sign : bool
         Whether to flip the sign of the angle provided, which reverses
-        the convention for the direction of rotation.
+        the convention for the direction of rotation. Default False.
+
+    Returns
+    -------
+    np.array
+        The image after alignment.
+
     """
 
     if image.ndim != 4:
