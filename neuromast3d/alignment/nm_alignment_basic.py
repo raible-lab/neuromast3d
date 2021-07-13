@@ -24,7 +24,7 @@ from skimage.measure import regionprops
 from skimage.transform import rotate
 from scipy.ndimage import center_of_mass
 
-from neuromast3d.alignment.utils import rotate_image_2d
+from utils import rotate_image_2d_custom
 
 logger = logging.getLogger(__name__)
 
@@ -202,10 +202,11 @@ if __name__ == '__main__':
             # Rotate function expects multichannel image
             if seg_cell.ndim == 3:
                 seg_cell = np.expand_dims(seg_cell, axis=0)
-            seg_cell_aligned = rotate_image_2d(
+            seg_cell_aligned = rotate_image_2d_custom(
                     image=seg_cell,
                     angle=rotation_angle,
-                    interpolation_order=0
+                    interpolation_order=0,
+                    flip_angle_sign=True
             )
 
             # Also rotate raw image
@@ -214,10 +215,11 @@ if __name__ == '__main__':
 
             if raw_cell.ndim == 3:
                 raw_cell = np.expand_dims(raw_cell, axis=0)
-            raw_cell_aligned = rotate_image_2d(
+            raw_cell_aligned = rotate_image_2d_custom(
                     image=raw_cell,
                     angle=rotation_angle,
-                    interpolation_order=0
+                    interpolation_order=0,
+                    flip_angle_sign=True
             )
 
             # Save aligned single cell mask and raw image

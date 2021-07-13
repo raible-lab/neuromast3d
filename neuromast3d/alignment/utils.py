@@ -81,7 +81,6 @@ def rotate_image_2d_custom(
     return img_aligned
 
 
-
 def rotate_image_2d(image: np.array, angle: float, interpolation_order: int = 0):
     """ Source: aicsshparam/shtools.py """
 
