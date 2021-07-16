@@ -128,7 +128,7 @@ def open_next_image(
         img_id={'choices': list_of_img_ids},
         filename={'label': 'Save in'}
 )
-def save_layer(layer: Layer, img_id: Union[str, None], filename: Path = output_dir):
+def save_layer(layer: Layer, img_id: str, filename: Path = output_dir):
     if layer:
         suffix = layer.name
         save_path = filename / f'{img_id}_{suffix}.tiff'
@@ -228,11 +228,18 @@ def create_watershed_lines(labels: Labels) -> Image:
     return Image(watershed_lines)
 
 
+def update_img_id(event):
+    save_layer.img_id.value = event.value
+    # save_layer.img_id.value = event.value.img_id
+
+
 viewer.window.add_dock_widget(clear_layers, area='right')
 viewer.window.add_dock_widget(open_next_image, area='right')
 viewer.window.add_dock_widget(generate_seeds_from_nuclei, area='right')
 viewer.window.add_dock_widget(run_seeded_watershed, area='right')
 viewer.window.add_dock_widget(create_watershed_lines, area='right')
 viewer.window.add_dock_widget(save_layer, area='right')
+
+open_next_image.img_id.changed.connect(update_img_id)
 
 napari.run()
