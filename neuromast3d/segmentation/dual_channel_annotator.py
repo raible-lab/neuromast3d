@@ -141,8 +141,7 @@ def save_layer(layer: Layer, img_id: str, filename: Path = output_dir):
                 save_path
         )
 
-# TODO: add 'suffix' option to allow saving multiple files
-# And update open next image with dialog boxes allowing to choose files
+
 @magicgui(
         call_button='Save result to output dir',
         img_id={'choices': list_of_img_ids}
@@ -230,7 +229,7 @@ def create_watershed_lines(labels: Labels) -> Image:
 
 def update_img_id(event):
     save_layer.img_id.value = event.value
-    # save_layer.img_id.value = event.value.img_id
+    save_layers_merged.img_id.value = event.value
 
 
 viewer.window.add_dock_widget(clear_layers, area='right')
@@ -239,6 +238,7 @@ viewer.window.add_dock_widget(generate_seeds_from_nuclei, area='right')
 viewer.window.add_dock_widget(run_seeded_watershed, area='right')
 viewer.window.add_dock_widget(create_watershed_lines, area='right')
 viewer.window.add_dock_widget(save_layer, area='right')
+viewer.window.add_dock_widget(save_layers_merged, area='right')
 
 open_next_image.img_id.changed.connect(update_img_id)
 
