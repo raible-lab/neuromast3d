@@ -40,6 +40,12 @@ parser.add_argument(
         help='overwrite files in destination directory',
         action='store_true'
 )
+parser.add_argument(
+        '-f',
+        '--fix_suffixes',
+        help='use when seg files in same dir have raw and edited suffixes',
+        action='store_true'
+)
 
 # TODO: this way of handling doing one channel is kinda hacky
 parser.add_argument(
@@ -88,15 +94,17 @@ if not os.path.isdir(dest_dir):
 raw_files = sorted(glob.glob(f'{raw_source_dir}/*.{extension}'))
 seg_files = sorted(glob.glob(f'{seg_source_dir}/*.{extension}'))
 
-# Some label images have different suffixes
-# If both 'raw' and 'edited' exist, we only want the 'edited' ones
-for fn in seg_files:
-    bn = os.path.basename(fn)
-    seg_img_name = bn.rpartition('_')[0]
-    raw_label_path = f'{seg_source_dir}/{seg_img_name}_rawlabels.tiff'
-    if 'editedlabels.tiff' in fn and os.path.isfile(raw_label_path):
-        print(raw_label_path)
-        seg_files.remove(raw_label_path)
+if args.fix_suffixes:
+
+    # Some label images have different suffixes
+    # If both 'raw' and 'edited' exist, we only want the 'edited' ones
+    for fn in seg_files:
+        bn = os.path.basename(fn)
+        seg_img_name = bn.rpartition('_')[0]
+        raw_label_path = f'{seg_source_dir}/{seg_img_name}_rawlabels.tiff'
+        if 'editedlabels.tiff' in fn and os.path.isfile(raw_label_path):
+            print(raw_label_path)
+            seg_files.remove(raw_label_path)
 
 if not len(raw_files) == len(seg_files):
     print('Number of raw files does not match number of seg files.')
