@@ -162,7 +162,7 @@ for row in fov_dataset.itertuples(index=False):
 
         # These numbers are guessed as reasonable thresholds
         if(
-                np.count_nonzero(single_cell_mem) < 1000
+                np.count_nonzero(single_cell_mem) < 500 
                 or np.count_nonzero(single_cell_nuc) < 100
         ):
             cell_label_list_copy.remove(label)
