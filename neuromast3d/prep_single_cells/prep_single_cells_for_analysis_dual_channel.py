@@ -25,6 +25,10 @@ parser.add_argument('extension', help='file extension to use, e.g. tiff')
 parser.add_argument('dest', help='directory in which to save output files')
 parser.add_argument('z_res', help='voxel depth', type=float)
 parser.add_argument('xy_res', help='pixel size in xy', type=float)
+parser.add_argument('raw_nuc_ch_index', type=int)
+parser.add_argument('raw_mem_ch_index', type=int)
+parser.add_argument('seg_nuc_ch_index', type=int)
+parser.add_argument('seg_mem_ch_index', type=int)
 
 # Parse arguments
 args = parser.parse_args()
@@ -71,7 +75,9 @@ for fn in raw_files:
     raw_img_names.append(
             {
                 'NM_ID': raw_img_name,
-                'SourceReadPath': fn
+                'SourceReadPath': fn,
+                'RawNucChannelIndex': args.raw_nuc_ch_index,
+                'RawMemChannelIndex': args.raw_mem_ch_index
             }
     )
 
@@ -84,7 +90,9 @@ for fn in seg_files:
     seg_img_names.append(
             {
                 'NM_ID': seg_img_name,
-                'SegmentationReadPath': fn
+                'SegmentationReadPath': fn,
+                'SegNucChannelIndex': args.seg_nuc_ch_index,
+                'SegMemChannelIndex': args.seg_mem_ch_index
             }
     )
 
@@ -110,12 +118,12 @@ for row in fov_dataset.itertuples(index=False):
     # Get the raw and segmented FOV images
     # Note: channels for mem and nuc are currently hardcoded
     reader_raw = AICSImage(row.SourceReadPath)
-    mem_raw = reader_raw.get_image_data('ZYX', S=0, T=0, C=0)
-    nuc_raw = reader_raw.get_image_data('ZYX', S=0, T=0, C=1)
+    mem_raw = reader_raw.get_image_data('ZYX', S=0, T=0, C=row.RawMemChannelIndex)
+    nuc_raw = reader_raw.get_image_data('ZYX', S=0, T=0, C=row.RawNucChannelIndex)
 
     reader_seg = AICSImage(row.SegmentationReadPath)
-    mem_seg = reader_seg.get_image_data('ZYX', S=0, T=0, C=1)
-    nuc_seg = reader_seg.get_image_data('ZYX', S=0, T=0, C=0)
+    mem_seg = reader_seg.get_image_data('ZYX', S=0, T=0, C=row.SegMemChannelIndex)
+    nuc_seg = reader_seg.get_image_data('ZYX', S=0, T=0, C=row.SegNucChannelIndex)
 
     # Discard nuclei not included in the membrane
     # NOTE: make sure this part works as expected
@@ -245,7 +253,11 @@ for row in fov_dataset.itertuples(index=False):
                      'fov_path': row.SourceReadPath,
                      'fov_seg_path': row.SegmentationReadPath,
                      'name_dict': name_dict,
-                     'structure_name': structure_name
+                     'structure_name': structure_name,
+                     'RawNucChannelIndex': row.RawNucChannelIndex,
+                     'RawMemChannelIndex': row.RawMemChannelIndex,
+                     'SegNucChannelIndex': row.SegNucChannelIndex,
+                     'SegMemChannelIndex': row.SegMemChannelIndex
                 }
         )
 
