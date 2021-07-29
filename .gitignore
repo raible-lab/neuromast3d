@@ -1,6 +1,9 @@
 # Recovery files for vim
 *.swp
 
+# Downloaded models (too big for github)
+aics_seg_model_zoo_models/
+
 # The following is from a github template for python projects
 # Add new things to ignore above this section
 # Source: https://github.com/github/gitignore
