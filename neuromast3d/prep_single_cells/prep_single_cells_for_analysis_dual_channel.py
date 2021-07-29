@@ -227,11 +227,12 @@ for row in fov_dataset.itertuples(index=False):
                  'crop_seg': ['dna_seg', 'cell_seg'],
          }
 
-        # If no structure name, need 'NA' as a placeholder for future steps
+        # If no structure name, add NoStr as a placeholder for future steps
+        # Note: avoid using NA or other pandas default_na_values
         if 'Gene' in fov_dataset:
             structure_name = row.Gene
         else:
-            structure_name = 'NA'
+            structure_name = 'NoStr'
         cell_meta.append(
                 {
                      'CellId': cell_id,
@@ -247,6 +248,8 @@ for row in fov_dataset.itertuples(index=False):
                      'structure_name': structure_name
                 }
         )
-        
+
 # Save cell dataset (every row is a cell)
 df_cell_meta = pd.DataFrame(cell_meta)
+path_to_manifest = dest_dir / 'cell_mainfest.csv'
+df_cell_meta.to_csv(path_to_manifest)
