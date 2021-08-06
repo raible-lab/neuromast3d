@@ -7,6 +7,80 @@ from skimage.transform import rotate
 from sklearn.decomposition import PCA
 
 
+def rotate_image_2d_custom(
+        image: np.array,
+        angle: float,
+        interpolation_order: int = 0,
+        flip_angle_sign: bool = False
+):
+    """Apply a 2D rotation to an image
+
+    Parameters
+    ----------
+    image : np.array
+        The image to be rotated. Must have ndims == 4.
+        The dimension order expected is CZYX.
+
+    angle : float
+        The rotation angle to apply to the image. If the sign is positive,
+        the rotation will be counterclockwise, as is default for
+        skimage.rotate. If the sign is negative, the rotation will be
+        clockwise.
+
+    interpolation_order : int
+        Interpolation order argument passed to skimage.rotate function.
+        Must be an integer. Default is 0.
+
+    flip_angle_sign : bool
+        Whether to flip the sign of the angle provided, which reverses
+        the convention for the direction of rotation. Default False.
+
+    Returns
+    -------
+    np.array
+        The image after alignment.
+
+    """
+
+    if image.ndim != 4:
+        raise ValueError(f'Invalid shape {image.shape} of input image.')
+
+    if not isinstance(interpolation_order, int):
+        raise ValueError('Interpolation order must be an integer value.')
+
+    if flip_angle_sign:
+
+        # Might be necessary in some contexts
+        # If wanting negative angles to be CCW rotation
+        angle = -angle
+
+    # Rotate each channel independently, then combine at the end
+    img_aligned = []
+    for channel in image:
+        ch_aligned = []
+
+        # Apply 2D rotation to each z-slice iteratively
+        # Probably not the best performance wise
+        # But it's easier for me to understand...
+        for z_slice in channel:
+            z_slice_aligned = rotate(
+                    image=z_slice,
+                    angle=angle,
+                    order=interpolation_order,
+                    resize=True,
+                    preserve_range=True
+            )
+            ch_aligned.append(z_slice_aligned)
+        ch_aligned = np.array(ch_aligned)
+        img_aligned.append(ch_aligned)
+    img_aligned = np.array(img_aligned)
+
+    # Make same as input image dtype
+    img_aligned = img_aligned.astype(image.dtype)
+
+    return img_aligned
+
+
 def rotate_image_2d(image: np.array, angle: float, interpolation_order: int = 0):
     """ Source: aicsshparam/shtools.py """
 

@@ -18,7 +18,7 @@ import napari
 import numpy as np
 from skimage import morphology, filters
 
-from utils import dt_watershed
+from neuromast3d.segmentation.utils import dt_watershed
 
 
 # Command line arguments

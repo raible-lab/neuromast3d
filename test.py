@@ -10,7 +10,7 @@ from scipy.ndimage import center_of_mass
 from skimage.draw import ellipsoid
 from skimage.transform import rotate
 
-from neuromast3d.alignment.utils import find_major_axis_by_pca, rotate_image_2d
+from neuromast3d.alignment.utils import find_major_axis_by_pca, rotate_image_2d_custom
 from neuromast3d.alignment.nm_alignment_basic import calculate_alignment_angle_2d
 
 
@@ -64,3 +64,40 @@ def test_calculate_alignment_angle_2d(origin, expected_angle):
             make_unique=True
     )
     np.testing.assert_almost_equal(angle, expected_angle)
+
+
+@pytest.mark.parametrize(
+        'a, b,', [
+            ((0, True), (0, False)),
+            ((90, True), (-90, False)),
+            ((180, True), (-180, True)),
+            ((90, True), (-270, True))
+        ]
+)
+def test_rotate_image_2d_custom_flipped_sign(a, b):
+
+    """ Test that several conditions that should be equal are
+
+    I.e. that the function behaves as expected with sign
+    
+    Although the function always uses resize=True currently,
+    this test is run with angles that should not change the size/shape
+    of the input array.
+    """
+
+    x = np.zeros((10, 10))
+    x[3, 3] = 1
+    x = np.expand_dims(x, axis=(0, 1))
+    x_rot_a = rotate_image_2d_custom(
+            image=x,
+            angle=a[0],
+            interpolation_order=0,
+            flip_angle_sign=a[1],
+    )
+    x_rot_b = rotate_image_2d_custom(
+            image=x,
+            angle=b[0],
+            interpolation_order=0,
+            flip_angle_sign=b[1],
+    )
+    np.testing.assert_almost_equal(x_rot_a, x_rot_b)

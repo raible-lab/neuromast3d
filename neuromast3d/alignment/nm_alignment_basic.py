@@ -24,7 +24,7 @@ from skimage.measure import regionprops
 from skimage.transform import rotate
 from scipy.ndimage import center_of_mass
 
-from neuromast3d.alignment.utils import rotate_image_2d
+from utils import rotate_image_2d_custom
 
 logger = logging.getLogger(__name__)
 
@@ -32,8 +32,41 @@ logger = logging.getLogger(__name__)
 def calculate_alignment_angle_2d(
         image: np.array,
         origin: tuple,
-        make_unique: bool = False,
+        make_unique: bool = True
 ):
+    """Calculate 2d alignment angle for a cell compared to a user-defined
+    origin to use as the axis of rotation. The centroid of the image is
+    calculated and the origin is subtracted from it to produce a vector
+    describing the location of the cell centroid compared to the origin in
+    the xy-plane. The rotation angle between this vector and the x-axis
+    (3 o'clock position) is then calculated.
+
+    Parameters
+    ----------
+    image : np.array
+        The input image to be rotated. Must be a single channel, 3D stack.
+        The centroid of this image will be calculated for the rotation.
+
+    origin : tuple
+        The origin around which to perform the rotation. Must be a 3-tuple in
+        dimension order z, y, x. Only the x and y coordinates are actually
+        used for the rotation.
+
+    make_unique : bool, optional
+        Whether to use the arctan2 function for the rotation, which
+        preserves information about the original orientation of the cell.
+        Default True.
+
+    Returns
+    -------
+    Tuple[float, np.array]
+        The angle for rotation and the image centroid after subtracting
+        the defined origin. The sign of the angle can be positive or negative,
+        depending on where the cell centroid was relative to the origin.
+        Cells with positive angles should be rotated CW, and those with
+        negative angles should be rotated CCW.
+
+    """
 
     if image.ndim != 3:
         raise ValueError(f'Invalid shape of input image {image.shape}. \
@@ -68,6 +101,13 @@ if __name__ == '__main__':
     parser.add_argument('z_res', help='voxel depth', type=float)
     parser.add_argument('xy_res', help='pixel size in xy', type=float)
     parser.add_argument(
+            '-c',
+            '--ch_index',
+            default=0,
+            type=int,
+            help='channel to use to calculate the rotation angle (default 0)'
+    )
+    parser.add_argument(
             '-u',
             '--make_unique',
             help='make the rotation angle unique',
@@ -81,6 +121,7 @@ if __name__ == '__main__':
     path_to_manifest = args.manifest
     z_res = args.z_res
     xy_res = args.xy_res
+    rot_ch_index = args.ch_index
 
     # Check that project directory exists
     if not os.path.isdir(project_dir):
@@ -114,17 +155,24 @@ if __name__ == '__main__':
     # Create fov dataframe
     fov_df = cell_df.copy()
     fov_df.drop_duplicates(subset=['fov_id'], keep='first', inplace=True)
-    fov_df.drop(['CellId', 'crop_raw_pre_alignment', 'crop_seg_pre_alignment', 'roi'], axis=1, inplace=True)
+    fov_df.drop(
+        ['CellId', 'crop_raw_pre_alignment', 'crop_seg_pre_alignment', 'roi'],
+        axis=1,
+        inplace=True
+    )
 
-    # Calculate neuromast centroid
+    # Calculate neuromast centroid and rotation angles
     nm_centroids = []
-
-    # Calculate angles for cell alignment
     cell_angles = []
 
+    # Loop through and interpolate each neuromast (fov)
     for fov in fov_df.itertuples(index=False):
         seg_reader = AICSImage(fov.fov_seg_path)
-        seg_img = seg_reader.get_image_data('ZYX', S=0, T=0, C=0)
+
+        # TODO: For now, nm and cell centroid calculation will just use the
+        # membrane channel. But it could be useful to have an option
+        # to rotate about the centroid calculated from the nucleus channel.
+        seg_img = seg_reader.get_image_data('ZYX', S=0, T=0, C=rot_ch_index)
         nm = seg_img > 0
         nm = resize(
                 seg_img,
@@ -164,27 +212,29 @@ if __name__ == '__main__':
 
             # Apply alignment to single cell mask
             reader = AICSImage(cell.crop_seg_pre_alignment)
-            seg_cell = reader.get_image_data('ZYX', S=0, T=0, C=0)
+            seg_cell = reader.get_image_data('CZYX', S=0, T=0)
 
             # Rotate function expects multichannel image
             if seg_cell.ndim == 3:
                 seg_cell = np.expand_dims(seg_cell, axis=0)
-            seg_cell_aligned = rotate_image_2d(
+            seg_cell_aligned = rotate_image_2d_custom(
                     image=seg_cell,
                     angle=rotation_angle,
-                    interpolation_order=0
+                    interpolation_order=0,
+                    flip_angle_sign=True
             )
 
             # Also rotate raw image
             reader = AICSImage(cell.crop_raw_pre_alignment)
-            raw_cell = reader.get_image_data('ZYX', S=0, T=0, C=0)
+            raw_cell = reader.get_image_data('CZYX', S=0, T=0)
 
             if raw_cell.ndim == 3:
                 raw_cell = np.expand_dims(raw_cell, axis=0)
-            raw_cell_aligned = rotate_image_2d(
+            raw_cell_aligned = rotate_image_2d_custom(
                     image=raw_cell,
                     angle=rotation_angle,
-                    interpolation_order=0
+                    interpolation_order=0,
+                    flip_angle_sign=True
             )
 
             # Save aligned single cell mask and raw image
