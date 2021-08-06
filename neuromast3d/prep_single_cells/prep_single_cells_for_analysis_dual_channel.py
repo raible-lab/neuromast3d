@@ -248,6 +248,8 @@ for row in fov_dataset.itertuples(index=False):
                      'roi': roi,
                      'crop_raw': crop_raw_path,
                      'crop_seg': crop_seg_path,
+                     # TODO: should the last xy_res should be z-res?
+                     # Or was it also like this in cvapipe?
                      'scale_micron': [xy_res, xy_res, xy_res],
                      'fov_id': row.NM_ID,
                      'fov_path': row.SourceReadPath,
