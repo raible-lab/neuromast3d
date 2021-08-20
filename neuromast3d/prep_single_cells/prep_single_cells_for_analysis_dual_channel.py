@@ -116,7 +116,6 @@ for row in fov_dataset.itertuples(index=False):
     current_fov_dir.mkdir(parents=True, exist_ok=True)
 
     # Get the raw and segmented FOV images
-    # Note: channels for mem and nuc are currently hardcoded
     reader_raw = AICSImage(row.SourceReadPath)
     mem_raw = reader_raw.get_image_data('ZYX', S=0, T=0, C=row.RawMemChannelIndex)
     nuc_raw = reader_raw.get_image_data('ZYX', S=0, T=0, C=row.RawNucChannelIndex)

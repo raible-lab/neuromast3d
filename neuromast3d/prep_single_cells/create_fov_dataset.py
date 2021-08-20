@@ -27,35 +27,6 @@ from skimage.morphology import ball, binary_closing, remove_small_objects
 
 from neuromast3d.alignment.utils import find_major_axis_by_pca, prepare_vector_for_napari
 
-'''
-# Function to explore rotation parameters
-@magicgui(
-        call_button='Apply rotation',
-        angle={'widget_type': 'FloatSlider', 'max': 360},
-        mode={'choices': ['reflect', 'constant', 'nearest', 'mirror']},
-        layout='horizontal'
-)
-def rotate_image_interactively(
-        layer: ImageData,
-        angle: float = 0,
-        mode='constant',
-        order: int = 0,
-        axes1: int = 2,
-        axes2: int = 1,
-) -> ImageData:
-    if layer is not None:
-        rotated_image = rotate(
-                input=layer,
-                angle=angle,
-                axes=(axes1, axes2),
-                mode=mode,
-                order=order,
-                reshape=True
-        )
-        return rotated_image
-
-'''
-
 
 logger = logging.getLogger(__name__)
 
