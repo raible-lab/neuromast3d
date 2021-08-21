@@ -17,15 +17,13 @@ from typing import Tuple
 from aicsimageio import AICSImage
 from aicsimageio.writers import ome_tiff_writer
 from aicsimageprocessing import resize, resize_to
-#from magicgui import magicgui
-import napari
-from napari.types import ImageData, LabelsData
 import numpy as np
 import pandas as pd
-from scipy.ndimage import center_of_mass, rotate
+from scipy.ndimage import center_of_mass
 from skimage.morphology import ball, binary_closing, remove_small_objects
 
 from neuromast3d.alignment.utils import find_major_axis_by_pca, prepare_vector_for_napari
+from utils import apply_3d_rotation, rotate_image_3d
 
 
 logger = logging.getLogger(__name__)
@@ -36,6 +34,10 @@ parser.add_argument('original_dir', help='directory containing OG images')
 parser.add_argument('raw_dir', help='directory containing raw images')
 parser.add_argument('seg_dir', help='directory containing segmented images')
 parser.add_argument('output_dir', help='directory in which to save outputs')
+parser.add_argument('raw_nuc_ch_index', type=int)
+parser.add_argument('raw_mem_ch_index', type=int)
+parser.add_argument('seg_nuc_ch_index', type=int)
+parser.add_argument('seg_mem_ch_index', type=int)
 parser.add_argument(
         '-r',
         '--rotate_auto',
@@ -101,7 +103,11 @@ for fn in raw_files:
                 'NM_ID': raw_img_name,
                 'SourceReadPath': fn,
                 'SegmentationReadPath': seg_img_path[0],
-                'pixel_size_xyz': pixel_size
+                'pixel_size_xyz': pixel_size,
+                'RawNucChannelIndex': args.raw_nuc_ch_index,
+                'RawMemChannelIndex': args.raw_mem_ch_index,
+                'SegNucChannelIndex': args.seg_nuc_ch_index,
+                'SegMemChannelIndex': args.seg_mem_ch_index
             }
     )
 
@@ -116,10 +122,10 @@ if args.rotate_auto:
 
         # Read in raw and seg images
         reader = AICSImage(fov.SourceReadPath)
-        raw_img = reader.get_image_data('ZYX', C=0, S=0, T=0)
+        raw_img = reader.get_image_data('CZYX', S=0, T=0)
 
         reader = AICSImage(fov.SegmentationReadPath)
-        seg_img = reader.get_image_data('ZYX', C=1, S=0, T=0)
+        seg_img = reader.get_image_data('CZYX', S=0, T=0)
 
         # Clean up small artifacts
         seg_img = remove_small_objects(seg_img, min_size=200)
@@ -127,7 +133,7 @@ if args.rotate_auto:
         # Merge cell labels together to create whole neuromast mask
         pixel_size_x, pixel_size_y, pixel_size_z = fov.pixel_size_xyz
         assert pixel_size_x == pixel_size_y
-        whole_nm_mask = seg_img > 0
+        whole_nm_mask = seg_img[fov.SegMemChannelIndex, :, :, :] > 0
 
         """
 
@@ -147,6 +153,15 @@ if args.rotate_auto:
         # whole_nm_mask = binary_closing(whole_nm_mask, ball(5))
         whole_nm_mask = whole_nm_mask.astype(np.uint8)
         whole_nm_mask = whole_nm_mask*255
+
+        # Calculate 3d rotation angles for tilt correction
+        yaw, pitch, roll = rotate_image_3d(whole_nm_mask)
+
+        # Apply 3d rotation to raw and seg images
+        raw_img_rot = apply_3d_rotation(raw_img, yaw, pitch, roll)
+        seg_img_rot = apply_3d_rotation(seg_img, yaw, pitch, roll)
+
+        """
 
         # Use PCA to find the major axes of the 3D binary mask
         eigenvecs = find_major_axis_by_pca(whole_nm_mask, threed=True)
@@ -172,25 +187,28 @@ if args.rotate_auto:
         seg_img_rot = rotate(seg_img_rot, z_angle, (0, 2), reshape=True, order=0)
         seg_img_rot = rotate(seg_img_rot, y_angle, (0, 1), reshape=True, order=0)
 
+        """
+
         rot_angles.append(
                 {
                     'NM_ID': fov.NM_ID,
-                    'angle_1': x_angle,
-                    'angle_2': z_angle,
-                    'angle_3': y_angle
+                    'angle_1': yaw,
+                    'angle_2': pitch,
+                    'angle_3': roll
                 }
         )
 
         raw_rot_path = output_dir / f'{fov.NM_ID}_raw_rot.tiff'
         writer = ome_tiff_writer.OmeTiffWriter(raw_rot_path)
-        writer.save(raw_img_rot, dimension_order='ZYX')
+        writer.save(raw_img_rot, dimension_order='CZYX')
 
         seg_rot_path = output_dir / f'{fov.NM_ID}_seg_rot.tiff'
         writer = ome_tiff_writer.OmeTiffWriter(seg_rot_path)
-        writer.save(seg_img_rot, dimension_order='ZYX')
+        writer.save(seg_img_rot, dimension_order='CZYX')
 
     rot_angle_df = pd.DataFrame(rot_angles)
-    path_to_angle_df = output_dir / 'auto_rotation_angles.csv'
+    rot_angle_df = fov_dataset.merge(rot_angle_df, on='NM_ID')
+    path_to_angle_df = output_dir / 'fov_dataset_with_rot.csv'
     rot_angle_df.to_csv(path_to_angle_df)
 
 
