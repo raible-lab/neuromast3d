@@ -21,9 +21,9 @@ def rotate_image_3d(mask):
 
     """
 
-    if mask.ndims != 3:
+    if mask.ndim != 3:
         raise ValueError('Image must have ndims == 3. '
-                         f'Provided image has ndims of {mask.ndims}')
+                         f'Provided image has ndims of {mask.ndim}')
 
     # Calculate principal axes of the image
     eigenvecs = find_major_axis_by_pca(mask, threed=True)
@@ -72,7 +72,7 @@ def apply_3d_rotation(image, yaw, pitch, roll):
 
     if image.ndim != 4:
         raise ValueError('Image must have ndims == 4.'
-                         f'Provided image has ndims of {image.ndims}')
+                         f'Provided image has ndims of {image.ndim}')
 
     # Rotate each channel independently, then combine at the end
     img_aligned = []
