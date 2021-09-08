@@ -34,6 +34,7 @@ parser.add_argument('input_ch', type=int, nargs=1,
 args = parser.parse_args()
 input_dir = Path(args.input_dir)
 output_dir = Path(args.output_dir)
+model_name = args.model_name
 normalization_vals = args.normalization_recipe
 backsub_radius = int(normalization_vals[0])
 simple_norm_lower = int(normalization_vals[1])
@@ -56,26 +57,37 @@ logger.info(sys.argv)
 
 # Load pretrained model
 model = SegModel()
-model.load_train('H2B_coarse', {'local_path': './aics_seg_model_zoo_models'})
+model.load_train(
+        model_name,
+        {'local_path': '/home/maddy/projects/aics_seg_model_zoo_models'}
+)
 model.to_gpu('cuda:0')
 
 # Apply model to images and save output binary masks
 list_of_files = Path(input_dir).glob('*.tiff')
 for path in list_of_files:
+
+    # Read in image
     reader = AICSImage(path)
     dna_img = reader.get_image_data(
             'CZYX', C=input_ch, S=0, T=0
     ).astype(np.float32)
+
+    # Preprocess
     dna_image_backsub = background_sub(dna_img, backsub_radius)
     dna_image_normalized = simple_norm(
             dna_image_backsub,
             simple_norm_lower,
             simple_norm_upper
     )
+
+    # Apply model
     nuclear_mask_from_dye = model.apply_on_single_zstack(
             dna_image_normalized,
             already_normalized=True
     )
+
+    # Save mask
     img_name = path.stem
     writer = ome_tiff_writer.OmeTiffWriter(
             output_dir / f'{img_name}_nuc_seg.tiff'
