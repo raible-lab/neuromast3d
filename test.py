@@ -6,7 +6,7 @@ from math import atan2
 
 import numpy as np
 import pytest
-from scipy.ndimage import center_of_mass
+from scipy import ndimage as ndi
 from skimage.draw import ellipsoid
 from skimage.transform import rotate
 
