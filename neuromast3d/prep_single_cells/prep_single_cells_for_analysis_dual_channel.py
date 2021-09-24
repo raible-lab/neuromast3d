@@ -4,6 +4,7 @@
 """ Prepare single cells for cvapipe_analysis (dual channel version) """
 
 import argparse
+from ast import literal_eval
 import logging
 from pathlib import Path
 import sys
@@ -15,29 +16,27 @@ from aicsimageio import AICSImage
 from aicsimageio.writers import ome_tiff_writer
 from aicsimageprocessing import resize, resize_to
 
+from utils import apply_3d_rotation
+
 logger = logging.getLogger(__name__)
 
 # Command line arguments
 parser = argparse.ArgumentParser()
-parser.add_argument('raw_dir', help='directory containing raw images')
-parser.add_argument('seg_dir', help='directroy contianing segmented image')
+parser.add_argument('fov_dataset', help='path to fov dataset csv file')
 parser.add_argument('extension', help='file extension to use, e.g. tiff')
 parser.add_argument('dest', help='directory in which to save output files')
-parser.add_argument('z_res', help='voxel depth', type=float)
-parser.add_argument('xy_res', help='pixel size in xy', type=float)
-parser.add_argument('raw_nuc_ch_index', type=int)
-parser.add_argument('raw_mem_ch_index', type=int)
-parser.add_argument('seg_nuc_ch_index', type=int)
-parser.add_argument('seg_mem_ch_index', type=int)
+parser.add_argument(
+        '-r',
+        '--rotate_auto',
+        help='apply automatic rotation found in previous steps',
+        action='store_true'
+)
 
 # Parse arguments
 args = parser.parse_args()
-raw_dir = Path(args.raw_dir)
-seg_dir = Path(args.seg_dir)
+path_to_fov_dataset = Path(args.fov_dataset)
 extension = args.extension
 dest_dir = Path(args.dest)
-z_res = args.z_res
-xy_res = args.xy_res
 
 # Create destination directory if it doesn't exist
 dest_dir.mkdir(parents=True, exist_ok=True)
@@ -51,56 +50,11 @@ logging.basicConfig(
 )
 logger.info(sys.argv)
 
-# Check paths exist
-if not raw_dir.is_dir():
-    print('Raw dir does not exist')
-    sys.exit()
+# Check path to fov dataset exists
+assert path_to_fov_dataset.exists
 
-if not seg_dir.is_dir():
-    print('Seg dir does not exist')
-    sys.exit()
-
-# Find all files in source directroes and gather images filenames into list
-raw_files = [fn for fn in raw_dir.glob(f'*.{extension}')]
-seg_files = [fn for fn in seg_dir.glob(f'*.{extension}')]
-
-if not len(raw_files) == len(seg_files):
-    print('Number of raw files does not match number of seg files.')
-    sys.exit()
-
-# Create initial fov dataframe (where every row is a neuromast)
-raw_img_names = []
-for fn in raw_files:
-    raw_img_name = fn.stem
-    raw_img_names.append(
-            {
-                'NM_ID': raw_img_name,
-                'SourceReadPath': fn,
-                'RawNucChannelIndex': args.raw_nuc_ch_index,
-                'RawMemChannelIndex': args.raw_mem_ch_index
-            }
-    )
-
-seg_img_names = []
-for fn in seg_files:
-    seg_img_name = fn.stem
-
-    # Segmented images usually have some suffix after a '_'
-    seg_img_name = seg_img_name.rpartition('_')[0]
-    seg_img_names.append(
-            {
-                'NM_ID': seg_img_name,
-                'SegmentationReadPath': fn,
-                'SegNucChannelIndex': args.seg_nuc_ch_index,
-                'SegMemChannelIndex': args.seg_mem_ch_index
-            }
-    )
-
-# Create fov dataframe from dicts and save
-raw_df = pd.DataFrame(raw_img_names)
-seg_df = pd.DataFrame(seg_img_names)
-fov_dataset = raw_df.merge(seg_df, on='NM_ID')
-# fov_dataset.to_csv(f'{dest_dir}/fov_dataset.csv)
+# Read fov dataset
+fov_dataset = pd.read_csv(path_to_fov_dataset)
 
 # Create dir for single cells to go into
 single_cell_dir = dest_dir / 'single_cell_masks'
@@ -116,7 +70,6 @@ for row in fov_dataset.itertuples(index=False):
     current_fov_dir.mkdir(parents=True, exist_ok=True)
 
     # Get the raw and segmented FOV images
-    # Note: channels for mem and nuc are currently hardcoded
     reader_raw = AICSImage(row.SourceReadPath)
     mem_raw = reader_raw.get_image_data('ZYX', S=0, T=0, C=row.RawMemChannelIndex)
     nuc_raw = reader_raw.get_image_data('ZYX', S=0, T=0, C=row.RawNucChannelIndex)
@@ -135,6 +88,9 @@ for row in fov_dataset.itertuples(index=False):
     dna_mask_label[dna_mask_bw > 0] = 1
     dna_mask_label = dna_mask_label * mem_seg
     nuc_seg = dna_mask_label
+
+    # Take z_res and xy_res from fov_dataframe
+    xy_res, _, z_res = literal_eval(row.pixel_size_xyz)
 
     # Rescale raw images to isotropic dimenstions
     raw_nuc_whole = resize(
@@ -162,7 +118,7 @@ for row in fov_dataset.itertuples(index=False):
 
         # These numbers are guessed as reasonable thresholds
         if(
-                np.count_nonzero(single_cell_mem) < 500 
+                np.count_nonzero(single_cell_mem) < 500
                 or np.count_nonzero(single_cell_nuc) < 100
         ):
             cell_label_list_copy.remove(label)
@@ -210,6 +166,17 @@ for row in fov_dataset.itertuples(index=False):
         nuc_seg = np.expand_dims(nuc_seg, axis=0)
         seg_merged = np.concatenate([nuc_seg, mem_seg], axis=0)
 
+        # Apply tilt correction if desired
+        # TODO: should this be done here?
+        # Or should it be done during another step, i.e. alignment?
+        if args.rotate_auto:
+            seg_merged = apply_3d_rotation(
+                    seg_merged,
+                    row.angle_1,
+                    row.angle_2,
+                    row.angle_3
+            )
+
         crop_seg_path = label_dir / 'segmentation.ome.tif'
         writer = ome_tiff_writer.OmeTiffWriter(crop_seg_path)
         writer.save(seg_merged, dimension_order='CZYX')
@@ -222,6 +189,16 @@ for row in fov_dataset.itertuples(index=False):
         raw_nuc = np.expand_dims(raw_nuc, axis=0)
         raw_mem = np.expand_dims(raw_mem, axis=0)
         raw_merged = np.concatenate([raw_nuc, raw_mem], axis=0)
+
+        # Apply tilt correction if desired
+        # Similar TODO as above applies
+        if args.rotate_auto:
+            raw_merged = apply_3d_rotation(
+                    raw_merged,
+                    row.angle_1,
+                    row.angle_2,
+                    row.angle_3
+            )
 
         crop_raw_path = label_dir / 'raw.ome.tif'
         writer = ome_tiff_writer.OmeTiffWriter(crop_raw_path)

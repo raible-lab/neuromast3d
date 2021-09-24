@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
+import pathlib
+
 from aicsimageio import AICSImage
 from aicsimageio.writers import ome_tiff_writer
 from aicsimageprocessing import resize, resize_to
@@ -10,11 +12,11 @@ import pandas as pd
 from scipy.stats import skew
 from skimage.morphology import binary_closing, ball
 from skimage.measure import regionprops
-from skimage.transform import rotate
-from scipy.ndimage import center_of_mass
+# from skimage.transform import rotate
+from scipy.ndimage import center_of_mass, rotate
 from sklearn.decomposition import PCA
 
-from .utils import rotate_image_2d, get_membrane_segmentation, unit_vector, \
+from utils import rotate_image_2d, get_membrane_segmentation, unit_vector, \
         angle_between, find_major_axis_by_pca, prepare_vector_for_napari
 
 # Constants (note: these are guessed right now)
@@ -24,53 +26,97 @@ PixelScaleY = PixelScaleX
 standard_res_qcb = PixelScaleX
 
 
-project_dir = '/home/maddy/projects/claudin_gfp_5dpf_airy_live/'
-nm_id = '20200617_1-SO2'
+project_dir = pathlib.Path('/home/maddy/projects/claudin_gfp_5dpf_airy_live/')
+raw_dir = project_dir / 'stack_aligned'
+seg_dir = project_dir / 'label_images_fixed_bg'
+output_dir = project_dir / 'test_auto_pca_rotation'
+output_dir.mkdir(parents=True, exist_ok=True)
 
-# Read in raw and segmented images
-raw_reader = AICSImage(f'{project_dir}/stack_aligned/{nm_id}.tiff')
-raw_img = raw_reader.get_image_data('ZYX', S=0, T=0, C=0)
+raw_files = list(raw_dir.glob('*.tiff'))
+seg_files = list(seg_dir.glob('*_rawlabels.tiff'))
 
-seg_reader = AICSImage(
-        f'{project_dir}/label_images_fixed_bg/{nm_id}_rawlabels.tiff'
-)
-seg_img = seg_reader.get_image_data('ZYX', S=0, T=0, C=0)
+angles = []
 
-# Merge cell labels together to create whole neuromast (nm) mask
-nm = seg_img > 0
+for fn in raw_files:
+    nm_id = fn.stem
 
-# Interpolate along z to create isotropic voxel dimensions
-# (same as preparing single cells for cvapipe_analysis)
-nm = resize(
-        seg_img,
-        (
-            PixelScaleZ / standard_res_qcb,
-            PixelScaleY / standard_res_qcb,
-            PixelScaleX / standard_res_qcb
-        ),
-        method='bilinear'
-)
+    # Read in raw and segmented images
+    raw_reader = AICSImage(f'{project_dir}/stack_aligned/{nm_id}.tiff')
+    raw_img = raw_reader.get_image_data('ZYX', S=0, T=0, C=0)
 
-# Clean up the neuromast mask (could investigate other functions here)
-nm = binary_closing(nm, ball(5))
-nm = nm.astype(np.uint8)
-nm = nm*255
+    seg_reader = AICSImage(
+            f'{project_dir}/label_images_fixed_bg/{nm_id}_rawlabels.tiff'
+    )
+    seg_img = seg_reader.get_image_data('ZYX', S=0, T=0, C=0)
 
-# Use PCA to find major axis of 3D binary mask
-eigenvecs = find_major_axis_by_pca(nm, threed=True)
+    # Merge cell labels together to create whole neuromast (nm) mask
+    nm = seg_img > 0
 
-# Find centroid of neuromast and each cell
-nm_centroid = center_of_mass(nm)
-single_cell_props = regionprops(seg_img)
+    # Interpolate along z to create isotropic voxel dimensions
+    # (same as preparing single cells for cvapipe_analysis)
+    nm = resize(
+            seg_img,
+            (
+                PixelScaleZ / standard_res_qcb,
+                PixelScaleY / standard_res_qcb,
+                PixelScaleX / standard_res_qcb
+            ),
+            method='bilinear'
+    )
 
-# Vizualize the vector
-viz_vector = prepare_vector_for_napari(
-        # Needs to be flipped - dims in xyz order but napari expects zyx
-        np.flip(eigenvecs[0]),
-        origin=(nm_centroid),
-        scale=100
-)
+    # Clean up the neuromast mask (could investigate other functions here)
+    nm = binary_closing(nm, ball(5))
+    nm = nm.astype(np.uint8)
+    nm = nm*255
 
+    # Use PCA to find major axis of 3D binary mask
+    eigenvecs = find_major_axis_by_pca(nm, threed=True)
+
+    # Find centroid of neuromast and each cell
+    nm_centroid = center_of_mass(nm)
+    single_cell_props = regionprops(seg_img)
+
+    # Vizualize the vector
+    viz_vector = prepare_vector_for_napari(
+            # Needs to be flipped - dims in xyz order but napari expects zyx
+            np.flip(eigenvecs[0]),
+            origin=(nm_centroid),
+            scale=100
+    )
+
+    # Rotate the neuromast until the three PC axes are the new x, y, and z axes
+    # First, align major axis to x
+    x_angle = np.arctan(eigenvecs[0][1] / eigenvecs[0][0]) * 180 / np.pi
+    nm_rot_x = rotate(seg_img, x_angle, (1, 2), reshape=True, order=0)
+
+    # Recalculate eigenvectors (idk if this is necessary, but hey it works)
+    eigenvecs_2 = find_major_axis_by_pca(nm_rot_x, threed=True)
+    z_angle = np.arctan(eigenvecs_2[0][2] / eigenvecs_2[0][0]) * 180 / np.pi
+    nm_rot_xz = rotate(nm_rot_x, z_angle, (0, 2), reshape=True, order=0)
+
+    # Repeat for final axis
+    eigenvecs_3 = find_major_axis_by_pca(nm_rot_xz, threed=True)
+    y_angle = np.arctan(eigenvecs_3[1][2] / eigenvecs_3[1][1]) * 180 / np.pi
+    nm_rot_final = rotate(nm_rot_xz, y_angle, (0, 1), reshape=True, order=0)
+
+    angles.append(
+            {
+                'NM_ID': nm_id,
+                'x_angle': x_angle,
+                'y_angle': y_angle,
+                'z_angle': z_angle,
+            }
+    )
+    path_to_img = output_dir / f'{nm_id}.tiff'
+
+    writer = ome_tiff_writer.OmeTiffWriter(path_to_img)
+    writer.save(nm_rot_final, dimension_order='ZYX')
+
+df = pd.DataFrame(angles)
+df.to_csv(output_dir / 'pca_rotation.csv')
+
+
+"""
 cell_angles = []
 for cell, props in enumerate(single_cell_props):
 
@@ -129,3 +175,5 @@ for row in df.itertuples(index=False):
     # however it is.
     # Also unsure if the cells need to be centered on their centroids
     # Maybe we should test what happens if we do that.
+
+"""

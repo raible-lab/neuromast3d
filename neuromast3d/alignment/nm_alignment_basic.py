@@ -24,7 +24,7 @@ from skimage.measure import regionprops
 from skimage.transform import rotate
 from scipy.ndimage import center_of_mass
 
-from utils import rotate_image_2d_custom
+from neuromast3d.alignment.utils import rotate_image_2d_custom
 
 logger = logging.getLogger(__name__)
 
@@ -98,8 +98,8 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Basic cell alignment')
     parser.add_argument('project_dir', help='project directory for this run')
     parser.add_argument('manifest', help='path to cell manifest in csv format')
-    parser.add_argument('z_res', help='voxel depth', type=float)
-    parser.add_argument('xy_res', help='pixel size in xy', type=float)
+    parser.add_argument('z_res', type=float)
+    parser.add_argument('xy_res', type=float)
     parser.add_argument(
             '-c',
             '--ch_index',

@@ -51,7 +51,7 @@ def cluster_cells(axes, clustering_algo='leiden'):
 
 # TODO: refactor to use functions
 # Start by reading in a manifest prepared by cvapipe_analysis
-path_to_manifest = Path('/home/maddy/projects/claudin_gfp_5dpf_DRAQ5_1h_airy_live/cvapipe_run_5/local_staging/computefeatures/manifest.csv')
+path_to_manifest = Path('/home/maddy/projects/claudin_gfp_5dpf_DRAQ5_1h_airy_live/temp/local_staging/computefeatures/manifest.csv')
 df_cf = pd.read_csv(path_to_manifest, index_col='CellId')
 
 # Apply PCA to shcoeffs
@@ -64,7 +64,7 @@ embedding_df, graph = cluster_cells(axes, clustering_algo='leiden')
 embedding_df = embedding_df.set_index(df_cf.index)
 
 # Merge to other data frames for maximum info
-path_to_manifest_a = Path('/home/maddy/projects/claudin_gfp_5dpf_DRAQ5_1h_airy_live/cvapipe_run_5/alignment/manifest.csv')
+path_to_manifest_a = Path('/home/maddy/projects/claudin_gfp_5dpf_DRAQ5_1h_airy_live/temp/alignment/manifest.csv')
 df_align = pd.read_csv(path_to_manifest_a, index_col='CellId')
 df_clustered = pd.concat([df_align, axes, embedding_df], axis=1)
 
