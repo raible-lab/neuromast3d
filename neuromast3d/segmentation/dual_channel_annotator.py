@@ -52,7 +52,7 @@ output_dir.mkdir(parents=True, exist_ok=True)
 
 # Save command line arguments into log file and output to console
 logger = logging.getLogger(__name__)
-log_file_path = output_dir / 'seg.log'
+log_file_path = output_dir / 'seg_3.log'
 logging.basicConfig(
         level=logging.INFO,
         format='%(asctime)s %(message)s',
@@ -90,7 +90,8 @@ def open_next_image(
     raw_filename: Path = raw_dir,
     nuc_seg_filename: Path = nuc_labels_dir,
     mem_pred_filename: Path = mem_pred_dir,
-    use_temp: bool = False
+    open_existing_labels: bool = False,
+    existing_suffix: str = None
 ) -> List[napari.types.LayerDataTuple]:
 
     # Open raw image
@@ -108,9 +109,9 @@ def open_next_image(
     # Open cell labels (if existing)
     cell_labels = np.zeros_like(nuc_labels)
 
-    if use_temp:
+    if open_existing_labels:
         try:
-            reader = AICSImage(f'{output_dir}/{img_id}_temp.tiff')
+            reader = AICSImage(f'{output_dir}/{img_id}_{existing_suffix}.tiff')
             nuc_labels = reader.get_image_data('ZYX', C=0, S=0, T=0)
             cell_labels = reader.get_image_data('ZYX', C=1, S=0, T=0)
         except FileNotFoundError:
@@ -150,7 +151,8 @@ def save_layers_merged(
         nuc_labels_layer: Labels,
         cell_labels_layer: Labels,
         img_id: Union[str, None],
-        finished: bool = False
+        suffix: str,
+        overwrite: bool
 ):
     '''Save selected layers to output directory as multichannel image.'''
 
@@ -160,29 +162,15 @@ def save_layers_merged(
         cell_labels_data = np.expand_dims(cell_labels_layer.data, axis=0)
         merged_labels = np.concatenate((nuc_labels_data, cell_labels_data), axis=0)
 
-        if finished:
-            # Save to output dir and log this id as finished
-            save_path = output_dir / f'{img_id}_finished.tiff'
-            writer = ome_tiff_writer.OmeTiffWriter(save_path)
-            writer.save(merged_labels, dimension_order='CZYX')
-            logger.info(
-                    '%s final results saved at %s',
-                    img_id,
-                    save_path
-            )
-
-        else:
-            # Save temporary results, overwriting any already in the output_dir
-            save_path = output_dir / f'{img_id}_temp.tiff'
-            writer = ome_tiff_writer.OmeTiffWriter(save_path, overwrite_file=True)
-            writer.save(merged_labels, dimension_order='CZYX')
-            logger.info(
-                    '%s temp results saved at %s',
-                    img_id,
-                    save_path
-            )
-
-    return
+        # Save to output dir and log this id as finished
+        save_path = output_dir / f'{img_id}_{suffix}.tiff'
+        writer = ome_tiff_writer.OmeTiffWriter(save_path, overwrite_file=overwrite)
+        writer.save(merged_labels, dimension_order='CZYX')
+        logger.info(
+                '%s final results saved at %s',
+                img_id,
+                save_path
+        )
 
 
 @magicgui(call_button='Generate seeds')
@@ -218,11 +206,60 @@ def run_seeded_watershed(
     return (labels, {'name': 'cell_labels'}, 'labels')
 
 
+@magicgui(call_button='Remove small objects')
+def remove_small_objects_wrapper(
+        image: Labels,
+        min_size: int = 64,
+        connectivity: int = 1,
+        make_xor_mask: bool = False
+        ) -> List[napari.types.LayerDataTuple]:
+    '''Remove small objects from label image'''
+    if viewer.layers:
+        # idk if this if statement should be more specific? TODO
+        # This whole script could really use some cleanup tho...
+        cleaned = morphology.remove_small_objects(
+                image.data,
+                min_size=min_size,
+                connectivity=connectivity
+        )
+
+        if make_xor_mask:
+            # To more easily see what was removed
+            image_as_binary = np.where(image.data > 0, 1, 0)
+            cleaned_as_binary = np.where(cleaned > 0, 1, 0)
+            xor_mask = np.logical_xor(image_as_binary, cleaned_as_binary)
+
+            return [(cleaned, {'name': f'{image.name}_cleaned'}, 'labels'),
+                    (xor_mask, {'name': 'cleaned_xor_mask'}, 'image')]
+
+        else:
+            return [(cleaned, {'name': f'{image.name}_cleaned'}, 'labels')]
+
+
 @magicgui(call_button='Create watershed lines')
-def create_watershed_lines(labels: Labels) -> Image:
+def create_watershed_lines(
+        labels: Labels,
+        connectivity: int = 2,
+        mode: str = 'thick',
+        blur: bool = False,
+) -> Image:
     '''Find boundaries of cell labels'''
     if viewer.layers['cell_labels']:
-        watershed_lines = find_boundaries(labels.data)
+        watershed_lines = find_boundaries(
+                labels.data,
+                connectivity=connectivity,
+                mode=mode
+                )
+
+        if blur:
+            # To use similar method from PlantSeg
+            watershed_lines = filters.gaussian(
+                    watershed_lines,
+                    sigma=1,
+                    preserve_range=True
+                    )
+            watershed_lines[watershed_lines >= 0.5] = 1
+            watershed_lines[watershed_lines < 0.5] = 0
 
     return Image(watershed_lines)
 
@@ -236,9 +273,10 @@ viewer.window.add_dock_widget(clear_layers, area='right')
 viewer.window.add_dock_widget(open_next_image, area='right')
 viewer.window.add_dock_widget(generate_seeds_from_nuclei, area='right')
 viewer.window.add_dock_widget(run_seeded_watershed, area='right')
+viewer.window.add_dock_widget(remove_small_objects_wrapper, area='right')
 viewer.window.add_dock_widget(create_watershed_lines, area='right')
-viewer.window.add_dock_widget(save_layer, area='right')
-viewer.window.add_dock_widget(save_layers_merged, area='right')
+viewer.window.add_dock_widget(save_layer, area='left')
+viewer.window.add_dock_widget(save_layers_merged, area='left')
 
 open_next_image.img_id.changed.connect(update_img_id)
 
