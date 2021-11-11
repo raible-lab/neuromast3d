@@ -27,11 +27,17 @@ parser = argparse.ArgumentParser(
 )
 parser.add_argument('raw_dir', help='directory containing raw input images')
 parser.add_argument('mask_dir', help='directory containing nuclear masks')
-parser.add_argument('output_dir', help='directory to save output labels')
 parser.add_argument('sigma', type=int, help='sigma to use for Gaussian blur of \
         distance transform')
 parser.add_argument('min_distance', type=int, help='min_distance parameter for \
         peak_local_max function')
+parser.add_argument('output_dir', help='desired output directory')
+parser.add_argument('-n', '--nuc_threshold', type=float, help='threshold to use \
+        if providing raw nuc predictions instead of binary masks')
+parser.add_argument('-b', '--boundary_dir', help='directory containing mem \
+        boundary predictions')
+parser.add_argument('-m', '--mem_threshold', type=float, help='threshold to use \
+        if providing raw mem predictons instead of just intensity')
 
 # Parse and save as variables
 args = parser.parse_args()
@@ -83,24 +89,37 @@ for img_id in list_of_img_ids:
     raw_img = reader.get_image_data('CZYX', S=0, T=0)
 
     # Read mask image
-    path = Path(f'{mask_dir}/{img_id}_nuc_seg.tiff')
+    # path = Path(f'{mask_dir}/{img_id}_nuc_seg.tiff')
+    path = Path(f'{mask_dir}/{img_id}_struct_segmentation.tiff')
     reader = AICSImage(path)
-    nuc_mask = reader.get_image_data('ZYX', C=0, S=0, T=0)
+    if args.nuc_threshold:
+        nuc_mask = reader.get_image_data('ZYX', C=0, S=0, T=0) > args.nuc_threshold
+    else:
+        nuc_mask = reader.get_image_data('ZYX', C=0, S=0, T=0)
 
     # Split raw into membrane and nucleus channels
-    # Note: Could refactor to allow passing channel index as arg
+    # TODO: Could refactor to allow passing channel index as arg
     # In case this varies
-    membranes = raw_img[0, :, :, :]
-    nuclei = raw_img[1, :, :, :]
+    membranes = raw_img[1, :, :, :]
+    nuclei = raw_img[0, :, :, :]
 
-    # Blur, threshold, and erode the membrane image
-    mem_blurred = filters.gaussian(membranes, sigma=1, preserve_range=True)
-    thresh_otsu = filters.thresholding.threshold_otsu(membranes)
-    mem_otsu = mem_blurred > thresh_otsu
-    mem_eroded = morphology.binary_erosion(mem_otsu)
+    # Use membrane boundary predictions and threshold if provided
+    if args.boundary_dir:
+        boundary_dir = args.boundary_dir
+        path = Path(f'{boundary_dir}/{img_id}_struct_segmentation.tiff')
+        reader = AICSImage(path)
+        mem_pred = reader.get_image_data('ZYX', C=0, T=0, S=0)
+        mem_binary = mem_pred > args.mem_threshold
+
+    else:
+        # Blur, threshold, and erode the membrane image
+        mem_blurred = filters.gaussian(membranes, sigma=1, preserve_range=True)
+        thresh_otsu = filters.thresholding.threshold_otsu(membranes)
+        mem_otsu = mem_blurred > thresh_otsu
+        mem_binary = morphology.binary_erosion(mem_otsu)
 
     # Use eroded membrane mask to split touching nuclei
-    nuclei_split = np.where(mem_eroded, 0, nuc_mask)
+    nuclei_split = np.where(mem_binary, 0, nuc_mask)
 
     # Apply dt watershed
     ws_results = dt_watershed(
