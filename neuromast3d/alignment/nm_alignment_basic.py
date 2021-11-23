@@ -7,6 +7,7 @@ As suggested by Lorenzo, this script assumes radial symmetry of the neuromast
 and does not try to align cells to an organismal axis (e.g. A/P, D/V).
 """
 
+import ast
 import argparse
 import logging
 import os
@@ -98,8 +99,6 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Basic cell alignment')
     parser.add_argument('project_dir', help='project directory for this run')
     parser.add_argument('manifest', help='path to cell manifest in csv format')
-    parser.add_argument('z_res', type=float)
-    parser.add_argument('xy_res', type=float)
     parser.add_argument(
             '-c',
             '--ch_index',
@@ -119,8 +118,6 @@ if __name__ == '__main__':
 
     project_dir = args.project_dir
     path_to_manifest = args.manifest
-    z_res = args.z_res
-    xy_res = args.xy_res
     rot_ch_index = args.ch_index
 
     # Check that project directory exists
@@ -174,6 +171,9 @@ if __name__ == '__main__':
         # to rotate about the centroid calculated from the nucleus channel.
         seg_img = seg_reader.get_image_data('ZYX', S=0, T=0, C=rot_ch_index)
         nm = seg_img > 0
+        pixel_size_xyz = ast.literal_eval(fov.pixel_size_xyz)
+        xy_res, _, z_res = pixel_size_xyz
+        print(xy_res, z_res)
         nm = resize(
                 seg_img,
                 (
