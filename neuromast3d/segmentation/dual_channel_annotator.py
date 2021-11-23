@@ -27,13 +27,14 @@ from skimage import morphology, filters
 from skimage.feature import peak_local_max
 from skimage.measure import regionprops
 from skimage.segmentation import find_boundaries, watershed
+import yaml
 
 
 # Command line arguments
 parser = argparse.ArgumentParser(
         description='Interactive membrane/nucleus segmentation'
 )
-parser.add_argument('raw_dir', help='directory containing raw imput images')
+parser.add_argument('raw_dir', help='path to directory with raw images')
 parser.add_argument('nuc_labels_dir',
                     help='directory containing segmented nuclei')
 parser.add_argument('mem_pred_dir',
@@ -46,6 +47,25 @@ raw_dir = Path(args.raw_dir)
 nuc_labels_dir = Path(args.nuc_labels_dir)
 mem_pred_dir = Path(args.mem_pred_dir)
 output_dir = Path(args.output_dir)
+
+"""
+# Command line arguments
+parser = argparse.ArgumentParser(
+        description='Interactive membrane/nucleus segmentation'
+)
+parser.add_argument('config', help='path to config file for segmentation')
+args = parser.parse_args()
+
+# Parse config
+config = yaml.load(open(args.config), Loader=yaml.Loader)
+
+raw_dir = Path(config['segmentation']['raw_dir'])
+# TODO: figure out how to handle the situation of having nuclei prelabeled
+# or providing already segmented ones
+nuc_pred_dir = Path(config['segmentation']['nuc_pred_dir'])
+mem_pred_dir = Path(config['segmentation']['mem_pred_dir'])
+output_dir = Path(config['segmentation']['output_dir'])
+"""
 
 # Create output directory
 output_dir.mkdir(parents=True, exist_ok=True)
