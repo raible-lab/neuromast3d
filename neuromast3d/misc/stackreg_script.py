@@ -64,7 +64,7 @@ def apply_stackreg_to_multichannel_img(
 
     # Save the registered image to the output directory
     output_path = output_dir / f'{path_to_image.stem}.tiff'
-    writer = ome_tiff_writer.OmeTiffWriter(output_path, overwrite_file=True)
+    writer = ome_tiff_writer.OmeTiffWriter(output_path)
     writer.save(transformed, dimension_order='CZYX')
 
     # Save transformation matrices
