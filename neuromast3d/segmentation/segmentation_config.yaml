@@ -20,5 +20,5 @@ segmentation:
         mem_pred_dir: '/home/maddy/projects/claudin_gfp_5dpf_DRAQ5_1h_airy_live_2/mem_model_3_results'
         mem_pred_threshold: 0.4
         # desired output directory name (will be created if nonexistent)
-        output_dir: '/home/maddy/projects/claudin_gfp_5dpf_DRAQ5_1h_airy_live_2/labels'
+        output_dir: '/home/maddy/projects/claudin_gfp_5dpf_DRAQ5_1h_airy_live_2/test_config'
 

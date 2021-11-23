@@ -30,6 +30,7 @@ from skimage.segmentation import find_boundaries, watershed
 import yaml
 
 
+"""
 # Command line arguments
 parser = argparse.ArgumentParser(
         description='Interactive membrane/nucleus segmentation'
@@ -47,8 +48,8 @@ raw_dir = Path(args.raw_dir)
 nuc_labels_dir = Path(args.nuc_labels_dir)
 mem_pred_dir = Path(args.mem_pred_dir)
 output_dir = Path(args.output_dir)
-
 """
+
 # Command line arguments
 parser = argparse.ArgumentParser(
         description='Interactive membrane/nucleus segmentation'
@@ -62,17 +63,17 @@ config = yaml.load(open(args.config), Loader=yaml.Loader)
 raw_dir = Path(config['segmentation']['raw_dir'])
 # TODO: figure out how to handle the situation of having nuclei prelabeled
 # or providing already segmented ones
-nuc_pred_dir = Path(config['segmentation']['nuc_pred_dir'])
+# For now, assume nuclei are always labeled beforehand
+nuc_labels_dir = Path(config['segmentation']['nuc_pred_dir'])
 mem_pred_dir = Path(config['segmentation']['mem_pred_dir'])
 output_dir = Path(config['segmentation']['output_dir'])
-"""
 
 # Create output directory
 output_dir.mkdir(parents=True, exist_ok=True)
 
 # Save command line arguments into log file and output to console
 logger = logging.getLogger(__name__)
-log_file_path = output_dir / 'seg_3.log'
+log_file_path = output_dir / 'seg.log'
 logging.basicConfig(
         level=logging.INFO,
         format='%(asctime)s %(message)s',
