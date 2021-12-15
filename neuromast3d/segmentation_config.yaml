@@ -1,9 +1,8 @@
 # Configuration file test
-# Only contains stuff for segmentation step so far, but can expand later
 
 segmentation:
         # enable/disable instance segmentation step
-        state: True
+        state: False
         # what to segment - cell, nuc, or cellnuc (both)
         structure: cellnuc
         # channel indices for cell membrane and nuclei in raw image
@@ -22,3 +21,27 @@ segmentation:
         # desired output directory name (will be created if nonexistent)
         output_dir: '/home/maddy/projects/claudin_gfp_5dpf_DRAQ5_1h_airy_live_2/test_config'
 
+create_fov_dataset:
+        # enable/disable fov dataset creation
+        state: True
+        # directory with original .czi images to get pixel size
+        original_dir: '/home/maddy/projects/claudin_gfp_5dpf_DRAQ5_1h_airy_live_2/original'
+        # directory with segmented/label images
+        seg_dir: '/home/maddy/projects/claudin_gfp_5dpf_DRAQ5_1h_airy_live_2/mem_seg_quick_ver1'
+        # channel indicies for cell membrane and nuclei in the seg image
+        seg_mem_ch: 1
+        seg_nuc_ch: 0
+        # set autorotation and, if so, the strategy to use
+        autorotate: False
+        output_dir: '/home/maddy/projects/claudin_gfp_5dpf_DRAQ5_1h_airy_live_2/cvapipe_run_7'
+        file_ext: tiff
+
+alignment:
+        # enable/disable alignment
+        state: True
+        # channel to use to calculate the rotation angle
+        rot_ch_index: 1
+        # whether to make the rotation unique
+        make_unique: True
+        # alignment method to use (xy_only or xy_xz)
+        mode: xy_xz

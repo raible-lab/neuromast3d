@@ -23,7 +23,9 @@ from scipy.stats import skew
 from skimage.morphology import binary_closing, ball
 from skimage.measure import regionprops
 from skimage.transform import rotate
-from scipy.ndimage import center_of_mass
+from sklearn.decomposition import PCA
+import scipy.ndimage as ndi
+import yaml
 
 from neuromast3d.alignment.utils import rotate_image_2d_custom
 
@@ -73,7 +75,7 @@ def calculate_alignment_angle_2d(
         raise ValueError(f'Invalid shape of input image {image.shape}. \
                 Image must be a single-channel, 3D stack.')
 
-    centroid = center_of_mass(image)
+    centroid = ndi.center_of_mass(image)
     centroid_normed = np.subtract(centroid, origin)
     x = centroid_normed[2]
     y = -centroid_normed[1]
@@ -97,28 +99,17 @@ def calculate_alignment_angle_2d(
 if __name__ == '__main__':
     # Command line arguments
     parser = argparse.ArgumentParser(description='Basic cell alignment')
-    parser.add_argument('project_dir', help='project directory for this run')
-    parser.add_argument('manifest', help='path to cell manifest in csv format')
-    parser.add_argument(
-            '-c',
-            '--ch_index',
-            default=0,
-            type=int,
-            help='channel to use to calculate the rotation angle (default 0)'
-    )
-    parser.add_argument(
-            '-u',
-            '--make_unique',
-            help='make the rotation angle unique',
-            action='store_true'
-    )
-
-    # Parse args and assign to variables
+    parser.add_argument('config', help='path to config file')
     args = parser.parse_args()
 
-    project_dir = args.project_dir
-    path_to_manifest = args.manifest
-    rot_ch_index = args.ch_index
+    # Parse config
+    config = yaml.load(open(args.config), Loader=yaml.Loader)
+
+    project_dir = pathlib.Path(config['create_fov_dataset']['output_dir'])
+    path_to_manifest = project_dir / 'prep_single_cells/cell_manifest.csv'
+    rot_ch_index = config['alignment']['rot_ch_index']
+    make_unique = config['alignment']['make_unique']
+    mode = config['alignment']['mode']
 
     # Check that project directory exists
     if not os.path.isdir(project_dir):
@@ -173,7 +164,6 @@ if __name__ == '__main__':
         nm = seg_img > 0
         pixel_size_xyz = ast.literal_eval(fov.pixel_size_xyz)
         xy_res, _, z_res = pixel_size_xyz
-        print(xy_res, z_res)
         nm = resize(
                 seg_img,
                 (
@@ -185,7 +175,7 @@ if __name__ == '__main__':
         )
         seg_img = resize_to(seg_img, nm.shape, method='nearest')
         nm = binary_closing(nm, ball(5))
-        nm_centroid = center_of_mass(nm)
+        nm_centroid = ndi.center_of_mass(nm)
 
         # Save nm centroids matched to fov_id
         nm_centroids.append({'fov_id': fov.fov_id, 'nm_centroid': nm_centroid})
@@ -207,12 +197,14 @@ if __name__ == '__main__':
             rotation_angle, cell_centroid = calculate_alignment_angle_2d(
                     image=cell_img,
                     origin=nm_centroid,
-                    make_unique=args.make_unique
+                    make_unique=make_unique
             )
 
-            # Apply alignment to single cell mask
+            # Apply xy alignment to seg and raw crops
             reader = AICSImage(cell.crop_seg_pre_alignment)
             seg_cell = reader.get_image_data('CZYX', S=0, T=0)
+            reader = AICSImage(cell.crop_raw_pre_alignment)
+            raw_cell = reader.get_image_data('CZYX', S=0, T=0)
 
             # Rotate function expects multichannel image
             if seg_cell.ndim == 3:
@@ -224,10 +216,6 @@ if __name__ == '__main__':
                     flip_angle_sign=True
             )
 
-            # Also rotate raw image
-            reader = AICSImage(cell.crop_raw_pre_alignment)
-            raw_cell = reader.get_image_data('CZYX', S=0, T=0)
-
             if raw_cell.ndim == 3:
                 raw_cell = np.expand_dims(raw_cell, axis=0)
             raw_cell_aligned = rotate_image_2d_custom(
@@ -236,6 +224,17 @@ if __name__ == '__main__':
                     interpolation_order=0,
                     flip_angle_sign=True
             )
+
+            if mode == 'xy_xz':
+                # Do an additional rotation to align xy long axis to z axis
+                _, z, y, x = np.nonzero(seg_cell_aligned)
+                xz = np.hstack([x.reshape(-1, 1), z.reshape(-1, 1)])
+                pca = PCA(n_components=2)
+                pca = pca.fit(xz)
+                eigenvecs = pca.components_
+                angle = 180 * np.arctan(eigenvecs[0][0]/eigenvecs[0][1]) / np.pi
+                seg_cell_aligned = ndi.rotate(seg_cell_aligned, -angle, axes=(1, 3), order=0)
+                raw_cell_aligned = ndi.rotate(raw_cell_aligned, -angle, axes=(1, 3), order=0)
 
             # Save aligned single cell mask and raw image
             current_cell_dir = f'{step_local_path}/{fov.fov_id}/{label}'
