@@ -33,4 +33,6 @@ def find_steps_to_run_from_config(config):
     return steps_to_run
 
 
-
+def run_steps(steps_to_run):
+    for step in steps_to_run:
+        step.main()
