@@ -8,6 +8,10 @@ import sys
 
 import yaml
 
+from neuromast3d.segmentation import dual_channel_annotator
+from neuromast3d.alignment import nm_alignment_basic
+from neuromast3d.prep_single_cells import create_fov_dataset, prep_single_cells_for_analysis_dual_channel
+
 
 def parse_cli_args():
     parser = argparse.ArgumentParser(description='Neuromast 3d workflow script')
@@ -34,5 +38,10 @@ def find_steps_to_run_from_config(config):
 
 
 def run_steps(steps_to_run):
-    for step in steps_to_run:
-        step.main()
+    if 'segmentation' in steps_to_run:
+        dual_channel_annotator.main()
+    if 'create_fov_dataset' in steps_to_run:
+        create_fov_dataset.main()
+        prep_single_cells_for_analysis_dual_channel.main()
+    if 'alignment' in steps_to_run:
+        nm_alignment_basic.main()
