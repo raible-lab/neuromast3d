@@ -24,37 +24,10 @@ from skimage.morphology import ball, binary_closing, remove_small_objects
 import yaml
 
 from neuromast3d.alignment.utils import find_major_axis_by_pca, prepare_vector_for_napari
-from utils import apply_3d_rotation, rotate_image_3d
+from neuromast3d.prep_single_cells.utils import apply_3d_rotation, rotate_image_3d
 
 
-'''
-# Command line arguments
-parser = argparse.ArgumentParser()
-parser.add_argument('original_dir', help='directory containing OG images')
-parser.add_argument('raw_dir', help='directory containing raw images')
-parser.add_argument('seg_dir', help='directory containing segmented images')
-parser.add_argument('output_dir', help='directory in which to save outputs')
-parser.add_argument('raw_nuc_ch_index', type=int)
-parser.add_argument('raw_mem_ch_index', type=int)
-parser.add_argument('seg_nuc_ch_index', type=int)
-parser.add_argument('seg_mem_ch_index', type=int)
-parser.add_argument(
-        '-r',
-        '--rotate_auto',
-        help='apply automatic rotation based on major axes found by PCA',
-        action='store_true'
-)
-
-# Parse arguments
-args = parser.parse_args()
-original_dir = Path(args.original_dir)
-raw_dir = Path(args.raw_dir)
-seg_dir = Path(args.seg_dir)
-output_dir = Path(args.output_dir)
-'''
-
-
-if __name__ == '__main__':
+def main():
     logger = logging.getLogger(__name__)
     parser = argparse.ArgumentParser(
             description='Create fov dataset script'
@@ -205,28 +178,5 @@ if __name__ == '__main__':
         rot_angle_df.to_csv(path_to_angle_df)
 
 
-
-"""
-# debugging stuff
-nm_centroid = center_of_mass(whole_nm_mask)
-vec1 = prepare_vector_for_napari(np.flip(eigenvecs[0]), origin=nm_centroid, scale=100)
-vec2 = prepare_vector_for_napari(np.flip(eigenvecs[1]), origin=nm_centroid, scale=100)
-vec3 = prepare_vector_for_napari(np.flip(eigenvecs[2]), origin=nm_centroid, scale=100)
-
-#eigenvecs_final = find_major_axis_by_pca(nm_mask_rot_1, threed=True)
-#eigenvecs_final = find_major_axis_by_pca(nm_mask_rot_2, threed=True)
-eigenvecs_final = find_major_axis_by_pca(nm_rot_final, threed=True)
-vec11 = prepare_vector_for_napari(np.flip(eigenvecs_final[0]), origin=nm_centroid, scale=100)
-vec22 = prepare_vector_for_napari(np.flip(eigenvecs_final[1]), origin=nm_centroid, scale=100)
-vec33 = prepare_vector_for_napari(np.flip(eigenvecs_final[2]), origin=nm_centroid, scale=100)
-
-viewer.add_vectors(vec1)
-viewer.add_vectors(vec2)
-viewer.add_vectors(vec3)
-viewer.add_vectors(vec11)
-viewer.add_vectors(vec22)
-viewer.add_vectors(vec33)
-viewer.add_points(nm_centroid)
-
-napari.run()
-"""
+if __name__ == '__main__':
+    main()

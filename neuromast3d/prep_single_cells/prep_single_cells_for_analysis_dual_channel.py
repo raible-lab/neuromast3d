@@ -17,11 +17,11 @@ from aicsimageio import AICSImage
 from aicsimageio.writers import ome_tiff_writer
 from aicsimageprocessing import resize, resize_to
 
-from utils import apply_3d_rotation
+from neuromast3d.prep_single_cells.utils import apply_3d_rotation
 
 logger = logging.getLogger(__name__)
 
-if __name__ == '__main__':
+def main():
     # Command line arguments
     parser = argparse.ArgumentParser(
             description='script to prep single cells'
@@ -253,3 +253,7 @@ if __name__ == '__main__':
     df_cell_meta = pd.DataFrame(cell_meta)
     path_to_manifest = dest_dir / 'cell_mainfest.csv'
     df_cell_meta.to_csv(path_to_manifest)
+
+
+if __name__ == '__main__':
+    main()
