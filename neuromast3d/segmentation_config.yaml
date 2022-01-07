@@ -9,7 +9,7 @@ segmentation:
         raw_mem_ch: 1
         raw_nuc_ch: 0
         # path to directory containing raw images to process
-        raw_dir: '/home/maddy/projects/claudin_gfp_5dpf_DRAQ5_1h_airy_live_2/stack_aligned'
+        raw_dir: '/home/maddy/projects/claudin_gfp_5dpf_DRAQ5_1h_airy_live_2_test_subset/stack_aligned'
         # path to nuclear mask predictions directory
         nuc_pred_dir: '/home/maddy/projects/claudin_gfp_5dpf_DRAQ5_1h_airy_live_2/nuc_model_iter2_results_checkpoint_100'
         nuc_pred_threshold: 0.6
@@ -19,26 +19,26 @@ segmentation:
         mem_pred_dir: '/home/maddy/projects/claudin_gfp_5dpf_DRAQ5_1h_airy_live_2/mem_model_3_results'
         mem_pred_threshold: 0.4
         # desired output directory name (will be created if nonexistent)
-        output_dir: '/home/maddy/projects/claudin_gfp_5dpf_DRAQ5_1h_airy_live_2/test_config'
+        output_dir: '/home/maddy/projects/claudin_gfp_5dpf_DRAQ5_1h_airy_live_2_test_subset'
 
 create_fov_dataset:
         # enable/disable fov dataset creation
         state: True
         # directory with original .czi images to get pixel size
-        original_dir: '/home/maddy/projects/claudin_gfp_5dpf_DRAQ5_1h_airy_live_2/original'
+        original_dir: '/home/maddy/projects/claudin_gfp_5dpf_DRAQ5_1h_airy_live_2_test_subset/original'
         # directory with segmented/label images
-        seg_dir: '/home/maddy/projects/claudin_gfp_5dpf_DRAQ5_1h_airy_live_2/mem_seg_quick_ver1'
+        seg_dir: '/home/maddy/projects/claudin_gfp_5dpf_DRAQ5_1h_airy_live_2_test_subset/segmentations'
         # channel indicies for cell membrane and nuclei in the seg image
         seg_mem_ch: 1
         seg_nuc_ch: 0
         # set autorotation and, if so, the strategy to use
         autorotate: False
-        output_dir: '/home/maddy/projects/claudin_gfp_5dpf_DRAQ5_1h_airy_live_2/cvapipe_run_TEST'
+        output_dir: '/home/maddy/projects/claudin_gfp_5dpf_DRAQ5_1h_airy_live_2_test_subset/cvapipe_run_TEST'
         file_ext: tiff
 
 alignment:
         # enable/disable alignment
-        state: False
+        state: True
         # channel to use to calculate the rotation angle
         rot_ch_index: 1
         # whether to make the rotation unique

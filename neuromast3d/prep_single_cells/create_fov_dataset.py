@@ -27,6 +27,96 @@ from neuromast3d.alignment.utils import find_major_axis_by_pca, prepare_vector_f
 from neuromast3d.prep_single_cells.utils import apply_3d_rotation, rotate_image_3d
 
 
+def create_fov_dataframe(raw_files, seg_files, og_files, raw_nuc_ch_index, raw_mem_ch_index, seg_nuc_ch_index, seg_mem_ch_index):
+    fov_info = []
+    for fn in raw_files:
+        raw_img_name = fn.stem
+        pattern = re.compile(raw_img_name)
+        seg_img_path = [fn for fn in seg_files if pattern.match(fn.stem)]
+        og_img_path = [fn for fn in og_files if pattern.match(fn.stem)]
+
+        try:
+            reader = AICSImage(og_img_path[0])
+            pixel_size = reader.get_physical_pixel_size()
+        except FileNotFoundError:
+            pass
+
+        fov_info.append(
+                {
+                    'NM_ID': raw_img_name,
+                    'SourceReadPath': fn,
+                    'SegmentationReadPath': seg_img_path[0],
+                    'pixel_size_xyz': pixel_size,
+                    'RawNucChannelIndex': raw_nuc_ch_index,
+                    'RawMemChannelIndex': raw_mem_ch_index,
+                    'SegNucChannelIndex': seg_nuc_ch_index,
+                    'SegMemChannelIndex': seg_mem_ch_index
+                }
+        )
+
+    fov_dataset = pd.DataFrame(fov_info)
+    return fov_dataset
+
+
+def read_raw_and_seg_img(path_to_raw, path_to_seg):
+    # Read in raw and seg images
+    reader = AICSImage(path_to_raw)
+    raw_img = reader.get_image_data('CZYX', S=0, T=0)
+
+    reader = AICSImage(path_to_seg)
+    seg_img = reader.get_image_data('CZYX', S=0, T=0)
+    return raw_img, seg_img
+
+
+def create_whole_nm_mask(seg_img, channel):
+    seg_img = remove_small_objects(seg_img, min_size=200)
+
+    # Merge cell labels together to create whole neuromast mask
+    whole_nm_mask = seg_img[channel, :, :, :] > 0
+    whole_nm_mask = whole_nm_mask.astype(np.uint8)
+    whole_nm_mask = whole_nm_mask*255
+    return whole_nm_mask
+
+
+def apply_autorotation(fov_dataset, output_dir):
+    # Iterate through all the files
+    rot_angles = []
+    for fov in fov_dataset.itertuples(index=False):
+
+        raw_img, seg_img = read_raw_and_seg_img(
+                fov.SourceReadPath,
+                fov.SegmentationReadPath
+        )
+        whole_nm_mask = create_whole_nm_mask(seg_img, fov.SegMemChannelIndex)
+        pixel_size_x, pixel_size_y, _ = fov.pixel_size_xyz
+        assert pixel_size_x == pixel_size_y
+
+        # Calculate 3d rotation angles for tilt correction
+        yaw, pitch, roll = rotate_image_3d(whole_nm_mask)
+
+        # Apply 3d rotation to raw and seg images
+        raw_img_rot = apply_3d_rotation(raw_img, yaw, pitch, roll)
+        seg_img_rot = apply_3d_rotation(seg_img, yaw, pitch, roll)
+
+        rot_angles.append(
+                {
+                    'NM_ID': fov.NM_ID,
+                    'angle_1': yaw,
+                    'angle_2': pitch,
+                    'angle_3': roll
+                }
+        )
+
+        raw_rot_path = output_dir / f'{fov.NM_ID}_raw_rot.tiff'
+        writer = ome_tiff_writer.OmeTiffWriter(raw_rot_path)
+        writer.save(raw_img_rot, dimension_order='CZYX')
+
+        seg_rot_path = output_dir / f'{fov.NM_ID}_seg_rot.tiff'
+        writer = ome_tiff_writer.OmeTiffWriter(seg_rot_path)
+        writer.save(seg_img_rot, dimension_order='CZYX')
+        return rot_angles
+
+
 def main():
     logger = logging.getLogger(__name__)
     parser = argparse.ArgumentParser(
@@ -78,100 +168,12 @@ def main():
         sys.exit()
 
     # Create initial fov dataframe (where every row is a neuromast)
-
-    fov_info = []
-    for fn in raw_files:
-        raw_img_name = fn.stem
-        pattern = re.compile(raw_img_name)
-        seg_img_path = [fn for fn in seg_files if pattern.match(fn.stem)]
-        og_img_path = [fn for fn in og_files if pattern.match(fn.stem)]
-
-        try:
-            reader = AICSImage(og_img_path[0])
-            pixel_size = reader.get_physical_pixel_size()
-        except FileNotFoundError:
-            pass
-
-        fov_info.append(
-                {
-                    'NM_ID': raw_img_name,
-                    'SourceReadPath': fn,
-                    'SegmentationReadPath': seg_img_path[0],
-                    'pixel_size_xyz': pixel_size,
-                    'RawNucChannelIndex': raw_nuc_ch_index,
-                    'RawMemChannelIndex': raw_mem_ch_index,
-                    'SegNucChannelIndex': seg_nuc_ch_index,
-                    'SegMemChannelIndex': seg_mem_ch_index
-                }
-        )
-
-    fov_dataset = pd.DataFrame(fov_info)
+    fov_dataset = create_fov_dataframe(raw_files, seg_files, og_files, raw_nuc_ch_index, raw_mem_ch_index, seg_nuc_ch_index, seg_mem_ch_index)
     fov_dataset.to_csv(output_dir / 'fov_dataset.csv')
 
     if rotate_auto:
 
-        # Iterate through all the files
-        rot_angles = []
-        for fov in fov_dataset.itertuples(index=False):
-
-            # Read in raw and seg images
-            reader = AICSImage(fov.SourceReadPath)
-            raw_img = reader.get_image_data('CZYX', S=0, T=0)
-
-            reader = AICSImage(fov.SegmentationReadPath)
-            seg_img = reader.get_image_data('CZYX', S=0, T=0)
-
-            # Clean up small artifacts
-            seg_img = remove_small_objects(seg_img, min_size=200)
-
-            # Merge cell labels together to create whole neuromast mask
-            pixel_size_x, pixel_size_y, pixel_size_z = fov.pixel_size_xyz
-            assert pixel_size_x == pixel_size_y
-            whole_nm_mask = seg_img[fov.SegMemChannelIndex, :, :, :] > 0
-
-            """
-
-            whole_nm_mask = resize(
-                    whole_nm_mask,
-                    (
-                        pixel_size_z / pixel_size_x,
-                        pixel_size_y / pixel_size_x,
-                        pixel_size_x / pixel_size_x
-                    ),
-                    method='bilinear'
-            )
-
-            """
-
-            # Clean up the mask a bit
-            # whole_nm_mask = binary_closing(whole_nm_mask, ball(5))
-            whole_nm_mask = whole_nm_mask.astype(np.uint8)
-            whole_nm_mask = whole_nm_mask*255
-
-            # Calculate 3d rotation angles for tilt correction
-            yaw, pitch, roll = rotate_image_3d(whole_nm_mask)
-
-            # Apply 3d rotation to raw and seg images
-            raw_img_rot = apply_3d_rotation(raw_img, yaw, pitch, roll)
-            seg_img_rot = apply_3d_rotation(seg_img, yaw, pitch, roll)
-
-            rot_angles.append(
-                    {
-                        'NM_ID': fov.NM_ID,
-                        'angle_1': yaw,
-                        'angle_2': pitch,
-                        'angle_3': roll
-                    }
-            )
-
-            raw_rot_path = output_dir / f'{fov.NM_ID}_raw_rot.tiff'
-            writer = ome_tiff_writer.OmeTiffWriter(raw_rot_path)
-            writer.save(raw_img_rot, dimension_order='CZYX')
-
-            seg_rot_path = output_dir / f'{fov.NM_ID}_seg_rot.tiff'
-            writer = ome_tiff_writer.OmeTiffWriter(seg_rot_path)
-            writer.save(seg_img_rot, dimension_order='CZYX')
-
+        rot_angles = apply_autorotation(fov_dataset, output_dir)
         rot_angle_df = pd.DataFrame(rot_angles)
         rot_angle_df = fov_dataset.merge(rot_angle_df, on='NM_ID')
         path_to_angle_df = output_dir / 'fov_dataset_with_rot.csv'

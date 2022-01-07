@@ -96,7 +96,30 @@ def calculate_alignment_angle_2d(
     return angle, centroid
 
 
-if __name__ == '__main__':
+def align_cell_xy_long_axis_to_z_axis(raw_cell, seg_cell):
+    _, z, y, x = np.nonzero(seg_cell)
+    xz = np.hstack([x.reshape(-1, 1), z.reshape(-1, 1)])
+    pca = PCA(n_components=2)
+    pca = pca.fit(xz)
+    eigenvecs = pca.components_
+    angle = 180 * np.arctan(eigenvecs[0][0]/eigenvecs[0][1]) / np.pi
+    seg_cell_aligned = ndi.rotate(seg_cell, -angle, axes=(1, 3), order=0)
+    raw_cell_aligned = ndi.rotate(raw_cell, -angle, axes=(1, 3), order=0)
+    return raw_cell_aligned, seg_cell_aligned
+
+
+def create_fov_dataframe_from_cell_dataframe(cell_df):
+    fov_df = cell_df.copy()
+    fov_df.drop_duplicates(subset=['fov_id'], keep='first', inplace=True)
+    fov_df.drop(
+        ['CellId', 'crop_raw_pre_alignment', 'crop_seg_pre_alignment', 'roi'],
+        axis=1,
+        inplace=True
+    )
+    return fov_df
+
+
+def main():
     # Command line arguments
     parser = argparse.ArgumentParser(description='Basic cell alignment')
     parser.add_argument('config', help='path to config file')
@@ -141,13 +164,7 @@ if __name__ == '__main__':
     logger.info(sys.argv)
 
     # Create fov dataframe
-    fov_df = cell_df.copy()
-    fov_df.drop_duplicates(subset=['fov_id'], keep='first', inplace=True)
-    fov_df.drop(
-        ['CellId', 'crop_raw_pre_alignment', 'crop_seg_pre_alignment', 'roi'],
-        axis=1,
-        inplace=True
-    )
+    fov_df = create_fov_dataframe_from_cell_dataframe(cell_df)
 
     # Calculate neuromast centroid and rotation angles
     nm_centroids = []
@@ -185,9 +202,6 @@ if __name__ == '__main__':
 
         for cell in current_fov_cells.itertuples(index=False):
 
-            # Actually we were never calculating the cell centroid based on
-            # the interpolated image... should we be? That would only throw off
-            # the z value I think? We'll try it here
             label = int(cell.label)
             cell_img = np.where(seg_img == label, seg_img, 0)
 
@@ -227,14 +241,8 @@ if __name__ == '__main__':
 
             if mode == 'xy_xz':
                 # Do an additional rotation to align xy long axis to z axis
-                _, z, y, x = np.nonzero(seg_cell_aligned)
-                xz = np.hstack([x.reshape(-1, 1), z.reshape(-1, 1)])
-                pca = PCA(n_components=2)
-                pca = pca.fit(xz)
-                eigenvecs = pca.components_
-                angle = 180 * np.arctan(eigenvecs[0][0]/eigenvecs[0][1]) / np.pi
-                seg_cell_aligned = ndi.rotate(seg_cell_aligned, -angle, axes=(1, 3), order=0)
-                raw_cell_aligned = ndi.rotate(raw_cell_aligned, -angle, axes=(1, 3), order=0)
+                # TODO: save this angle too?
+                raw_cell_aligned, seg_cell_aligned = align_cell_xy_long_axis_to_z_axis(raw_cell_aligned, seg_cell_aligned)
 
             # Save aligned single cell mask and raw image
             current_cell_dir = f'{step_local_path}/{fov.fov_id}/{label}'
@@ -268,3 +276,7 @@ if __name__ == '__main__':
     angle_df = pd.DataFrame(cell_angles)
     cell_df = cell_df.merge(angle_df, on='CellId')
     cell_df.to_csv(f'{step_local_path}/manifest.csv')
+
+
+if __name__ == '__main__':
+    main()
