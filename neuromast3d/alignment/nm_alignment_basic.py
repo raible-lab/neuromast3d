@@ -119,15 +119,7 @@ def create_fov_dataframe_from_cell_dataframe(cell_df):
     return fov_df
 
 
-def main():
-    # Command line arguments
-    parser = argparse.ArgumentParser(description='Basic cell alignment')
-    parser.add_argument('config', help='path to config file')
-    args = parser.parse_args()
-
-    # Parse config
-    config = yaml.load(open(args.config), Loader=yaml.Loader)
-
+def execute_step(config):
     project_dir = pathlib.Path(config['create_fov_dataset']['output_dir'])
     path_to_manifest = project_dir / 'prep_single_cells/cell_manifest.csv'
     rot_ch_index = config['alignment']['rot_ch_index']
@@ -276,6 +268,14 @@ def main():
     angle_df = pd.DataFrame(cell_angles)
     cell_df = cell_df.merge(angle_df, on='CellId')
     cell_df.to_csv(f'{step_local_path}/manifest.csv')
+
+
+def main():
+    parser = argparse.ArgumentParser(description='Basic cell alignment')
+    parser.add_argument('config', help='path to config file')
+    args = parser.parse_args()
+    config = yaml.load(open(args.config), Loader=yaml.Loader)
+    execute_step(config)
 
 
 if __name__ == '__main__':

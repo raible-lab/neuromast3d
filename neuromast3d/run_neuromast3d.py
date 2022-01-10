@@ -35,20 +35,20 @@ def find_steps_to_run_from_config(config):
     return steps_to_run
 
 
-def run_steps(steps_to_run):
+def run_steps(steps_to_run, config):
     if 'segmentation' in steps_to_run:
         dual_channel_annotator.main()
     if 'create_fov_dataset' in steps_to_run:
-        create_fov_dataset.main()
-        prep_single_cells_for_analysis_dual_channel.main()
+        create_fov_dataset.execute_step(config)
+        prep_single_cells_for_analysis_dual_channel.execute_step(config)
     if 'alignment' in steps_to_run:
-        nm_alignment_basic.main()
+        nm_alignment_basic.execute_step(config)
 
 def main():
     args = parse_cli_args()
     config = load_config(args)
     steps_to_run = find_steps_to_run_from_config(config)
-    run_steps(steps_to_run)
+    run_steps(steps_to_run, config)
 
 
 if __name__ == '__main__':

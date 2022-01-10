@@ -23,7 +23,7 @@ from scipy.ndimage import center_of_mass
 from skimage.morphology import ball, binary_closing, remove_small_objects
 import yaml
 
-from neuromast3d.alignment.utils import find_major_axis_by_pca, prepare_vector_for_napari
+from neuromast3d.alignment.utils import find_major_axis_by_pca
 from neuromast3d.prep_single_cells.utils import apply_3d_rotation, rotate_image_3d
 
 
@@ -117,16 +117,9 @@ def apply_autorotation(fov_dataset, output_dir):
         return rot_angles
 
 
-def main():
-    logger = logging.getLogger(__name__)
-    parser = argparse.ArgumentParser(
-            description='Create fov dataset script'
-    )
-    parser.add_argument('config', help='path to config file')
-    args = parser.parse_args()
-
-    # Read config
-    config = yaml.load(open(args.config), Loader=yaml.Loader)
+def execute_step(config):
+    # This function can be called as part of running a workflow
+    # or as a standalone script (e.g. if using main() function)
     original_dir = Path(config['create_fov_dataset']['original_dir'])
     raw_dir = Path(config['segmentation']['raw_dir'])
     seg_dir = Path(config['create_fov_dataset']['seg_dir'])
@@ -139,6 +132,8 @@ def main():
 
     # Create output directory if it doesn't exist
     output_dir.mkdir(parents=True, exist_ok=True)
+
+    logger = logging.getLogger(__name__)
 
     # Save command line arguments into logfile
     log_file_path = output_dir / 'create_fov_dataset.log'
@@ -179,6 +174,15 @@ def main():
         path_to_angle_df = output_dir / 'fov_dataset_with_rot.csv'
         rot_angle_df.to_csv(path_to_angle_df)
 
+
+def main():
+    parser = argparse.ArgumentParser(
+            description='Create fov dataset script'
+    )
+    parser.add_argument('config', help='path to config file')
+    args = parser.parse_args()
+    config = yaml.load(open(args.config), Loader=yaml.Loader)
+    execute_step(config)
 
 if __name__ == '__main__':
     main()

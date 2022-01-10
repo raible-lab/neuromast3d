@@ -227,18 +227,7 @@ def create_single_cell_dataset(fov_dataset, output_dir, rotate_auto=False):
     return cell_meta
 
 
-def main():
-    # Command line arguments
-    parser = argparse.ArgumentParser(
-            description='script to prep single cells'
-    )
-    parser.add_argument('config', help='path to config file')
-    args = parser.parse_args()
-
-    # Parse config
-    config = yaml.load(open(args.config), Loader=yaml.Loader)
-
-    extension = config['create_fov_dataset']['file_ext']
+def execute_step(config):
     project_dir = Path(config['create_fov_dataset']['output_dir'])
     output_dir = project_dir / 'prep_single_cells'
     rotate_auto = config['create_fov_dataset']['autorotate']
@@ -273,6 +262,17 @@ def main():
     df_cell_meta = pd.DataFrame(cell_meta)
     path_to_manifest = output_dir / 'cell_manifest.csv'
     df_cell_meta.to_csv(path_to_manifest)
+
+
+def main():
+    # Command line arguments
+    parser = argparse.ArgumentParser(
+            description='script to prep single cells'
+    )
+    parser.add_argument('config', help='path to config file')
+    args = parser.parse_args()
+    config = yaml.load(open(args.config), Loader=yaml.Loader)
+    execute_step(config)
 
 
 if __name__ == '__main__':
