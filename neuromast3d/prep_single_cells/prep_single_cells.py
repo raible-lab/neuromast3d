@@ -18,7 +18,7 @@ from aicsimageio.writers import ome_tiff_writer
 from aicsimageprocessing import resize, resize_to
 
 from neuromast3d.prep_single_cells.utils import apply_3d_rotation
-
+from neuromast3d.prep_single_cells.create_fov_dataset import step_logger
 
 def inherit_labels(dna_mask_bw, mem_seg):
     dna_mask_label = np.zeros_like(mem_seg)
@@ -231,6 +231,7 @@ def create_single_cell_dataset(fov_dataset, output_dir, rotate_auto=False):
 
 
 def execute_step(config):
+    step_name = 'prep_single_cells'
     project_dir = Path(config['create_fov_dataset']['output_dir'])
     output_dir = project_dir / 'prep_single_cells'
     rotate_auto = config['create_fov_dataset']['autorotate']
@@ -243,15 +244,8 @@ def execute_step(config):
     # Create destination directory if it doesn't exist
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    logger = logging.getLogger(__name__)
-
     # Save command line arguments into logfile
-    log_file_path = output_dir / 'prep_single_cells.log'
-    logging.basicConfig(
-            filename=log_file_path,
-            level=logging.INFO,
-            format='%(asctime)s %(message)s'
-    )
+    logger = step_logger(step_name, output_dir)
     logger.info(sys.argv)
 
     # Check path to fov dataset exists

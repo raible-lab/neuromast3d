@@ -27,6 +27,12 @@ from neuromast3d.alignment.utils import find_major_axis_by_pca
 from neuromast3d.prep_single_cells.utils import apply_3d_rotation, rotate_image_3d
 
 
+def check_dir_exists(path_to_dir):
+    if not path_to_dir.is_dir():
+        print(f'{path_to_dir} does not exist')
+        sys.exit()
+
+
 def create_fov_dataframe(raw_files, seg_files, og_files, raw_nuc_ch_index, raw_mem_ch_index, seg_nuc_ch_index, seg_mem_ch_index):
     fov_info = []
     for fn in raw_files:
@@ -145,13 +151,8 @@ def execute_step(config):
     logger.info(sys.argv)
 
     # Check paths exist
-    if not raw_dir.is_dir():
-        print('Raw dir does not exist')
-        sys.exit()
-
-    if not seg_dir.is_dir():
-        print('Seg dir does not exist')
-        sys.exit()
+    for dir_name in raw_dir, seg_dir:
+        check_dir_exists(dir_name)
 
     # Find all files in source directories and gather image filenames into list
     raw_files = list(raw_dir.glob('*.tiff'))

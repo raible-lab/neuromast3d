@@ -27,9 +27,8 @@ from sklearn.decomposition import PCA
 import scipy.ndimage as ndi
 import yaml
 
+from neuromast3d.create_fov_dataset import read_raw_and_seg_img, check_dir_exists, step_logger
 from neuromast3d.alignment.utils import rotate_image_2d_custom
-
-logger = logging.getLogger(__name__)
 
 
 def calculate_alignment_angle_2d(
@@ -119,17 +118,29 @@ def create_fov_dataframe_from_cell_dataframe(cell_df):
     return fov_df
 
 
+def save_raw_and_seg_cell(raw_img, seg_img, current_cell_dir):
+    pathlib.Path(current_cell_dir).mkdir(parents=True, exist_ok=True)
+    seg_path = f'{current_cell_dir}/segmentation.ome.tif'
+    crop_seg_aligned_path = pathlib.path(seg_path)
+    writer = ome_tiff_writer.OmeTiffWriter(crop_seg_aligned_path)
+    writer.save(seg_img, dimension_order='czyx')
+
+    raw_path = f'{current_cell_dir}/raw.ome.tif'
+    crop_raw_aligned_path = pathlib.Path(raw_path)
+    writer = ome_tiff_writer.OmeTiffWriter(crop_raw_aligned_path)
+    writer.save(raw_img, dimension_order='CZYX')
+    return raw_path, seg_path
+
+
 def execute_step(config):
+    step_name = 'alignment'
     project_dir = pathlib.Path(config['create_fov_dataset']['output_dir'])
     path_to_manifest = project_dir / 'prep_single_cells/cell_manifest.csv'
     rot_ch_index = config['alignment']['rot_ch_index']
     make_unique = config['alignment']['make_unique']
     mode = config['alignment']['mode']
 
-    # Check that project directory exists
-    if not os.path.isdir(project_dir):
-        print('Project directory does not exist')
-        sys.exit()
+    check_dir_exists(project_dir)
 
     # Read the manifest to align cells for this run
     cell_df = pd.read_csv(path_to_manifest, index_col=0)
@@ -147,12 +158,7 @@ def execute_step(config):
     step_local_path.mkdir(parents=True, exist_ok=True)
 
     # Save command line arguments to logfile for future reference
-    log_file_path = step_local_path / 'alignment.log'
-    logging.basicConfig(
-            filename=log_file_path,
-            level=logging.INFO,
-            format='%(asctime)s %(message)s'
-    )
+    logger = step_logger(step_name, step_local_path)
     logger.info(sys.argv)
 
     # Create fov dataframe
@@ -207,10 +213,7 @@ def execute_step(config):
             )
 
             # Apply xy alignment to seg and raw crops
-            reader = AICSImage(cell.crop_seg_pre_alignment)
-            seg_cell = reader.get_image_data('CZYX', S=0, T=0)
-            reader = AICSImage(cell.crop_raw_pre_alignment)
-            raw_cell = reader.get_image_data('CZYX', S=0, T=0)
+            raw_cell, seg_cell = read_raw_and_seg_img(cell.crop_raw_pre_alignment, cell.crop_seg_pre_alignment)
 
             # Rotate function expects multichannel image
             if seg_cell.ndim == 3:
@@ -238,16 +241,7 @@ def execute_step(config):
 
             # Save aligned single cell mask and raw image
             current_cell_dir = f'{step_local_path}/{fov.fov_id}/{label}'
-            pathlib.Path(current_cell_dir).mkdir(parents=True, exist_ok=True)
-            seg_path = f'{current_cell_dir}/segmentation.ome.tif'
-            crop_seg_aligned_path = pathlib.Path(seg_path)
-            writer = ome_tiff_writer.OmeTiffWriter(crop_seg_aligned_path)
-            writer.save(seg_cell_aligned, dimension_order='CZYX')
-
-            raw_path = f'{current_cell_dir}/raw.ome.tif'
-            crop_raw_aligned_path = pathlib.Path(raw_path)
-            writer = ome_tiff_writer.OmeTiffWriter(crop_raw_aligned_path)
-            writer.save(raw_cell_aligned, dimension_order='CZYX')
+            raw_path, seg_path = save_raw_and_seg_cell(raw_cell_aligned, seg_cell_aligned, current_cell_dir)
 
             # Save angle matched to cell_id
             # Also saves cell centroid and paths for rotated single cells
