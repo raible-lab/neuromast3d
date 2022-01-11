@@ -19,8 +19,6 @@ from aicsimageprocessing import resize, resize_to
 
 from neuromast3d.prep_single_cells.utils import apply_3d_rotation
 
-logger = logging.getLogger(__name__)
-
 
 def inherit_labels(dna_mask_bw, mem_seg):
     dna_mask_label = np.zeros_like(mem_seg)
@@ -80,6 +78,17 @@ def standardize_channel_order(row):
     return raw_structures_reordered, seg_structures_reordered
 
 
+def read_fov_images(row):
+    reader_raw = AICSImage(row.SourceReadPath)
+    mem_raw = reader_raw.get_image_data('ZYX', S=0, T=0, C=row.RawMemChannelIndex)
+    nuc_raw = reader_raw.get_image_data('ZYX', S=0, T=0, C=row.RawNucChannelIndex)
+
+    reader_seg = AICSImage(row.SegmentationReadPath)
+    mem_seg = reader_seg.get_image_data('ZYX', S=0, T=0, C=row.SegMemChannelIndex)
+    nuc_seg = reader_seg.get_image_data('ZYX', S=0, T=0, C=row.SegNucChannelIndex)
+    return mem_raw, nuc_raw, mem_seg, nuc_seg
+
+
 def create_single_cell_dataset(fov_dataset, output_dir, rotate_auto=False):
     # Create dir for single cells to go into
     single_cell_dir = output_dir / 'single_cell_masks'
@@ -94,13 +103,7 @@ def create_single_cell_dataset(fov_dataset, output_dir, rotate_auto=False):
         current_fov_dir.mkdir(parents=True, exist_ok=True)
 
         # Get the raw and segmented FOV images
-        reader_raw = AICSImage(row.SourceReadPath)
-        mem_raw = reader_raw.get_image_data('ZYX', S=0, T=0, C=row.RawMemChannelIndex)
-        nuc_raw = reader_raw.get_image_data('ZYX', S=0, T=0, C=row.RawNucChannelIndex)
-
-        reader_seg = AICSImage(row.SegmentationReadPath)
-        mem_seg = reader_seg.get_image_data('ZYX', S=0, T=0, C=row.SegMemChannelIndex)
-        nuc_seg = reader_seg.get_image_data('ZYX', S=0, T=0, C=row.SegNucChannelIndex)
+        mem_raw, nuc_raw, mem_seg, nuc_seg = read_fov_images(row)
 
         # Discard nuclei not included in the membrane
         dna_mask_bw = nuc_seg
@@ -239,6 +242,8 @@ def execute_step(config):
 
     # Create destination directory if it doesn't exist
     output_dir.mkdir(parents=True, exist_ok=True)
+
+    logger = logging.getLogger(__name__)
 
     # Save command line arguments into logfile
     log_file_path = output_dir / 'prep_single_cells.log'
