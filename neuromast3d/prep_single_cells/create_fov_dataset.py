@@ -33,6 +33,17 @@ def check_dir_exists(path_to_dir):
         sys.exit()
 
 
+def step_logger(step_name, output_dir):
+    logger = logging.getLogger(__name__)
+    log_file_path = output_dir / f'{step_name}.log'
+    logging.basicConfig(
+            filename=log_file_path,
+            level=logging.INFO,
+            format='%(asctime)s %(message)s'
+    )
+    return logger
+
+
 def create_fov_dataframe(raw_files, seg_files, og_files, raw_nuc_ch_index, raw_mem_ch_index, seg_nuc_ch_index, seg_mem_ch_index):
     fov_info = []
     for fn in raw_files:
@@ -126,6 +137,8 @@ def apply_autorotation(fov_dataset, output_dir):
 def execute_step(config):
     # This function can be called as part of running a workflow
     # or as a standalone script (e.g. if using main() function)
+    step_name = 'create_fov_dataset'
+
     original_dir = Path(config['create_fov_dataset']['original_dir'])
     raw_dir = Path(config['segmentation']['raw_dir'])
     seg_dir = Path(config['create_fov_dataset']['seg_dir'])
@@ -139,15 +152,8 @@ def execute_step(config):
     # Create output directory if it doesn't exist
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    logger = logging.getLogger(__name__)
-
     # Save command line arguments into logfile
-    log_file_path = output_dir / 'create_fov_dataset.log'
-    logging.basicConfig(
-            filename=log_file_path,
-            level=logging.INFO,
-            format='%(asctime)s %(message)s'
-    )
+    logger = step_logger(step_name, output_dir)
     logger.info(sys.argv)
 
     # Check paths exist
