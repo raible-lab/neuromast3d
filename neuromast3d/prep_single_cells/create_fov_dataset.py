@@ -44,7 +44,7 @@ def step_logger(step_name, output_dir):
     return logger
 
 
-def create_fov_dataframe(raw_files, seg_files, og_files, raw_nuc_ch_index, raw_mem_ch_index, seg_nuc_ch_index, seg_mem_ch_index):
+def create_fov_dataframe(raw_files, seg_files, og_files, channel_ids):
     fov_info = []
     for fn in raw_files:
         raw_img_name = fn.stem
@@ -64,10 +64,7 @@ def create_fov_dataframe(raw_files, seg_files, og_files, raw_nuc_ch_index, raw_m
                     'SourceReadPath': fn,
                     'SegmentationReadPath': seg_img_path[0],
                     'pixel_size_xyz': pixel_size,
-                    'RawNucChannelIndex': raw_nuc_ch_index,
-                    'RawMemChannelIndex': raw_mem_ch_index,
-                    'SegNucChannelIndex': seg_nuc_ch_index,
-                    'SegMemChannelIndex': seg_mem_ch_index
+                    **channel_ids
                 }
         )
 
@@ -149,6 +146,13 @@ def execute_step(config):
     seg_mem_ch_index = config['create_fov_dataset']['seg_mem_ch']
     rotate_auto = config['create_fov_dataset']['autorotate']
 
+    channel_ids = {
+            'RawNucChannelIndex': raw_nuc_ch_index,
+            'RawMemChannelIndex': raw_mem_ch_index,
+            'SegNucChannelIndex': seg_nuc_ch_index,
+            'SegMemChannelIndex': seg_mem_ch_index
+    }
+
     # Create output directory if it doesn't exist
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -170,7 +174,7 @@ def execute_step(config):
         sys.exit()
 
     # Create initial fov dataframe (where every row is a neuromast)
-    fov_dataset = create_fov_dataframe(raw_files, seg_files, og_files, raw_nuc_ch_index, raw_mem_ch_index, seg_nuc_ch_index, seg_mem_ch_index)
+    fov_dataset = create_fov_dataframe(raw_files, seg_files, og_files, channel_ids)
     fov_dataset.to_csv(output_dir / 'fov_dataset.csv')
 
     if rotate_auto:

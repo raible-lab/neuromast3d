@@ -30,7 +30,7 @@ from skimage.segmentation import find_boundaries, watershed
 import yaml
 
 
-if __name__ == '__main__':
+def main():
     # Command line arguments
     parser = argparse.ArgumentParser(
             description='Interactive membrane/nucleus segmentation'
@@ -283,3 +283,7 @@ if __name__ == '__main__':
     open_next_image.img_id.changed.connect(update_img_id)
 
     napari.run()
+
+
+if __name__ == '__main__':
+    main()

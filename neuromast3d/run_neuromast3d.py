@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 import argparse
-import sys
+from pathlib import Path
 
 import yaml
 
@@ -23,6 +23,11 @@ def load_config(args):
     return config
 
 
+def save_config(config, output_dir):
+    with open(output_dir / 'config_saved.yaml', 'w') as output:
+        yaml.dump(config, output)
+
+
 def find_steps_to_run_from_config(config):
     possible_steps = [
             'segmentation',
@@ -37,8 +42,12 @@ def find_steps_to_run_from_config(config):
 
 def run_steps(steps_to_run, config):
     if 'segmentation' in steps_to_run:
+        output_dir = Path(config['segmentation']['output_dir'])
+        save_config(config, output_dir)
         dual_channel_annotator.main()
     if 'create_fov_dataset' in steps_to_run:
+        output_dir = Path(config['create_fov_dataset']['output_dir'])
+        save_config(config, output_dir)
         create_fov_dataset.execute_step(config)
         prep_single_cells_for_analysis_dual_channel.execute_step(config)
     if 'alignment' in steps_to_run:
