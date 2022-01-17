@@ -8,7 +8,7 @@ import yaml
 
 from neuromast3d.segmentation import dual_channel_annotator
 from neuromast3d.alignment import nm_alignment_basic
-from neuromast3d.prep_single_cells import create_fov_dataset, prep_single_cells_for_analysis_dual_channel
+from neuromast3d.prep_single_cells import create_fov_dataset, prep_single_cells
 
 
 def parse_cli_args():
@@ -49,7 +49,7 @@ def run_steps(steps_to_run, config):
         output_dir = Path(config['create_fov_dataset']['output_dir'])
         save_config(config, output_dir)
         create_fov_dataset.execute_step(config)
-        prep_single_cells_for_analysis_dual_channel.execute_step(config)
+        prep_single_cells.execute_step(config)
     if 'alignment' in steps_to_run:
         nm_alignment_basic.execute_step(config)
 

@@ -1,13 +1,18 @@
-# Configuration file test
+# Channel indices for raw and seg images
+channels:
+        raw_channels:
+                nucleus: 0
+                membrane: 1
+
+        seg_channels:
+                nucleus_seg: 0
+                cell_seg: 1
 
 segmentation:
         # enable/disable instance segmentation step
         state: False
         # what to segment - cell, nuc, or cellnuc (both)
         structure: cellnuc
-        # channel indices for cell membrane and nuclei in raw image
-        raw_mem_ch: 1
-        raw_nuc_ch: 0
         # path to directory containing raw images to process
         raw_dir: '/home/maddy/projects/claudin_gfp_5dpf_DRAQ5_1h_airy_live_2_test_subset/stack_aligned'
         # path to nuclear mask predictions directory
@@ -28,9 +33,6 @@ create_fov_dataset:
         original_dir: '/home/maddy/projects/claudin_gfp_5dpf_DRAQ5_1h_airy_live_2_test_subset/original'
         # directory with segmented/label images
         seg_dir: '/home/maddy/projects/claudin_gfp_5dpf_DRAQ5_1h_airy_live_2_test_subset/segmentations'
-        # channel indicies for cell membrane and nuclei in the seg image
-        seg_mem_ch: 1
-        seg_nuc_ch: 0
         # set autorotation and, if so, the strategy to use
         autorotate: False
         output_dir: '/home/maddy/projects/claudin_gfp_5dpf_DRAQ5_1h_airy_live_2_test_subset/cvapipe_run_TEST'
@@ -38,7 +40,7 @@ create_fov_dataset:
 
 alignment:
         # enable/disable alignment
-        state: True
+        state: False
         # channel to use to calculate the rotation angle
         rot_ch_index: 1
         # whether to make the rotation unique

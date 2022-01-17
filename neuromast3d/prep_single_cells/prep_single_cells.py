@@ -5,20 +5,19 @@
 
 import argparse
 from ast import literal_eval
-import logging
 from pathlib import Path
 import sys
-
-import numpy as np
-import pandas as pd
-import yaml
 
 from aicsimageio import AICSImage
 from aicsimageio.writers import ome_tiff_writer
 from aicsimageprocessing import resize, resize_to
+import numpy as np
+import pandas as pd
+import yaml
 
 from neuromast3d.prep_single_cells.utils import apply_3d_rotation
 from neuromast3d.prep_single_cells.create_fov_dataset import step_logger
+
 
 def inherit_labels(dna_mask_bw, mem_seg):
     dna_mask_label = np.zeros_like(mem_seg)
@@ -70,22 +69,14 @@ def crop_to_roi(image, roi):
     return image
 
 
-def standardize_channel_order(row):
-    raw_structures = ['dna', 'membrane']
-    seg_structures = ['dna_seg', 'cell_seg']
-    raw_structures_reordered = [raw_structures[i] for i in [row.RawNucChannelIndex, row.RawMemChannelIndex]]
-    seg_structures_reordered = [seg_structures[i] for i in [row.SegNucChannelIndex, row.SegMemChannelIndex]]
-    return raw_structures_reordered, seg_structures_reordered
-
-
 def read_fov_images(row):
     reader_raw = AICSImage(row.SourceReadPath)
-    mem_raw = reader_raw.get_image_data('ZYX', S=0, T=0, C=row.RawMemChannelIndex)
-    nuc_raw = reader_raw.get_image_data('ZYX', S=0, T=0, C=row.RawNucChannelIndex)
+    mem_raw = reader_raw.get_image_data('ZYX', S=0, T=0, C=row.membrane)
+    nuc_raw = reader_raw.get_image_data('ZYX', S=0, T=0, C=row.nucleus)
 
     reader_seg = AICSImage(row.SegmentationReadPath)
-    mem_seg = reader_seg.get_image_data('ZYX', S=0, T=0, C=row.SegMemChannelIndex)
-    nuc_seg = reader_seg.get_image_data('ZYX', S=0, T=0, C=row.SegNucChannelIndex)
+    mem_seg = reader_seg.get_image_data('ZYX', S=0, T=0, C=row.nucleus_seg)
+    nuc_seg = reader_seg.get_image_data('ZYX', S=0, T=0, C=row.cell_seg)
     return mem_raw, nuc_raw, mem_seg, nuc_seg
 
 
@@ -194,13 +185,6 @@ def create_single_cell_dataset(fov_dataset, output_dir, rotate_auto=False):
             writer.save(raw_merged, dimension_order='CZYX')
             cell_id = f'{row.NM_ID}_{label}'
 
-            # Add name dict - may need to alter for 3 channel images
-            raw_structures, seg_structures = standardize_channel_order(row)
-            name_dict = {
-                     'crop_raw': raw_structures,
-                     'crop_seg': seg_structures,
-             }
-
             # If no structure name, add NoStr as a placeholder for future steps
             # Note: avoid using NA or other pandas default_na_values
             if 'Gene' in fov_dataset:
@@ -219,12 +203,12 @@ def create_single_cell_dataset(fov_dataset, output_dir, rotate_auto=False):
                          'fov_id': row.NM_ID,
                          'fov_path': row.SourceReadPath,
                          'fov_seg_path': row.SegmentationReadPath,
-                         'name_dict': name_dict,
+                         'name_dict': row.name_dict,
                          'structure_name': structure_name,
-                         'RawNucChannelIndex': row.RawNucChannelIndex,
-                         'RawMemChannelIndex': row.RawMemChannelIndex,
-                         'SegNucChannelIndex': row.SegNucChannelIndex,
-                         'SegMemChannelIndex': row.SegMemChannelIndex
+                         'RawNucChannelIndex': row.nucleus,
+                         'RawMemChannelIndex': row.membrane,
+                         'SegNucChannelIndex': row.nucleus_seg,
+                         'SegMemChannelIndex': row.cell_seg
                     }
             )
     return cell_meta

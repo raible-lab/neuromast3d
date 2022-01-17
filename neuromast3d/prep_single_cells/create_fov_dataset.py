@@ -44,7 +44,17 @@ def step_logger(step_name, output_dir):
     return logger
 
 
-def create_fov_dataframe(raw_files, seg_files, og_files, channel_ids):
+def create_name_dict(raw_channel_ids, seg_channel_ids):
+    name_dict = {
+            'crop_raw': [*raw_channel_ids.keys()],
+            'crop_seg': [*seg_channel_ids.keys()]
+    }
+    return name_dict
+
+
+def create_fov_dataframe(raw_files, seg_files, og_files, raw_channel_ids, seg_channel_ids):
+    channel_ids = {**raw_channel_ids, **seg_channel_ids}
+    name_dict = create_name_dict(raw_channel_ids, seg_channel_ids)
     fov_info = []
     for fn in raw_files:
         raw_img_name = fn.stem
@@ -64,6 +74,7 @@ def create_fov_dataframe(raw_files, seg_files, og_files, channel_ids):
                     'SourceReadPath': fn,
                     'SegmentationReadPath': seg_img_path[0],
                     'pixel_size_xyz': pixel_size,
+                    'name_dict': name_dict,
                     **channel_ids
                 }
         )
@@ -131,6 +142,12 @@ def apply_autorotation(fov_dataset, output_dir):
         return rot_angles
 
 
+def get_channel_ids(config):
+    raw_channel_ids = config['raw_channels']
+    seg_channel_ids = config['seg_channels']
+    return raw_channel_ids, seg_channel_ids
+
+
 def execute_step(config):
     # This function can be called as part of running a workflow
     # or as a standalone script (e.g. if using main() function)
@@ -140,18 +157,8 @@ def execute_step(config):
     raw_dir = Path(config['segmentation']['raw_dir'])
     seg_dir = Path(config['create_fov_dataset']['seg_dir'])
     output_dir = Path(config['create_fov_dataset']['output_dir'])
-    raw_nuc_ch_index = config['segmentation']['raw_nuc_ch']
-    raw_mem_ch_index = config['segmentation']['raw_mem_ch']
-    seg_nuc_ch_index = config['create_fov_dataset']['seg_nuc_ch']
-    seg_mem_ch_index = config['create_fov_dataset']['seg_mem_ch']
     rotate_auto = config['create_fov_dataset']['autorotate']
-
-    channel_ids = {
-            'RawNucChannelIndex': raw_nuc_ch_index,
-            'RawMemChannelIndex': raw_mem_ch_index,
-            'SegNucChannelIndex': seg_nuc_ch_index,
-            'SegMemChannelIndex': seg_mem_ch_index
-    }
+    raw_channel_ids, seg_channel_ids = get_channel_ids(config['channels'])
 
     # Create output directory if it doesn't exist
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -174,7 +181,7 @@ def execute_step(config):
         sys.exit()
 
     # Create initial fov dataframe (where every row is a neuromast)
-    fov_dataset = create_fov_dataframe(raw_files, seg_files, og_files, channel_ids)
+    fov_dataset = create_fov_dataframe(raw_files, seg_files, og_files, raw_channel_ids, seg_channel_ids)
     fov_dataset.to_csv(output_dir / 'fov_dataset.csv')
 
     if rotate_auto:

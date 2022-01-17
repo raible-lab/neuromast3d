@@ -27,7 +27,7 @@ from sklearn.decomposition import PCA
 import scipy.ndimage as ndi
 import yaml
 
-from neuromast3d.create_fov_dataset import read_raw_and_seg_img, check_dir_exists, step_logger
+from neuromast3d.prep_single_cells.create_fov_dataset import read_raw_and_seg_img, check_dir_exists, step_logger
 from neuromast3d.alignment.utils import rotate_image_2d_custom
 
 
