@@ -84,7 +84,6 @@ def create_fov_dataframe(raw_files, seg_files, og_files, raw_channel_ids, seg_ch
 
 
 def read_raw_and_seg_img(path_to_raw, path_to_seg):
-    # Read in raw and seg images
     reader = AICSImage(path_to_raw)
     raw_img = reader.get_image_data('CZYX', S=0, T=0)
 
@@ -95,8 +94,6 @@ def read_raw_and_seg_img(path_to_raw, path_to_seg):
 
 def create_whole_nm_mask(seg_img, channel):
     seg_img = remove_small_objects(seg_img, min_size=200)
-
-    # Merge cell labels together to create whole neuromast mask
     whole_nm_mask = seg_img[channel, :, :, :] > 0
     whole_nm_mask = whole_nm_mask.astype(np.uint8)
     whole_nm_mask = whole_nm_mask*255
@@ -112,7 +109,7 @@ def apply_autorotation(fov_dataset, output_dir):
                 fov.SourceReadPath,
                 fov.SegmentationReadPath
         )
-        whole_nm_mask = create_whole_nm_mask(seg_img, fov.SegMemChannelIndex)
+        whole_nm_mask = create_whole_nm_mask(seg_img, fov.cell_seg)
         pixel_size_x, pixel_size_y, _ = fov.pixel_size_xyz
         assert pixel_size_x == pixel_size_y
 
