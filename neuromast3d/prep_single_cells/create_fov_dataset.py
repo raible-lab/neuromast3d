@@ -27,6 +27,7 @@ from neuromast3d.alignment.utils import find_major_axis_by_pca
 from neuromast3d.prep_single_cells.utils import apply_3d_rotation, rotate_image_3d
 from neuromast3d.step_utils import read_raw_and_seg_img, step_logger, check_dir_exists
 
+
 def create_name_dict(raw_channel_ids, seg_channel_ids):
     name_dict = {
             'crop_raw': [*raw_channel_ids.keys()],
