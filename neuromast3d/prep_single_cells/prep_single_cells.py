@@ -16,7 +16,7 @@ import pandas as pd
 import yaml
 
 from neuromast3d.prep_single_cells.utils import apply_3d_rotation
-from neuromast3d.prep_single_cells.create_fov_dataset import step_logger, read_raw_and_seg_img
+from neuromast3d.step_utils import step_logger, read_raw_and_seg_img, create_step_dir
 
 
 def inherit_labels(dna_mask_bw, mem_seg):
@@ -134,7 +134,7 @@ def create_single_cell_dataset(fov_dataset, output_dir, rotate_auto=False):
                     method='bilinear'
             )
             raw_non_mem = apply_function_to_all_channels(raw_non_mem, resize_to_isotropic).astype(np.uint16)
-            raw_whole = np.concatenate([raw_mem_whole, raw_non_mem], axis=0)
+            raw_whole = np.insert(raw_non_mem, row.membrane, raw_mem_whole, axis=0)
 
         else:
             raw_whole = raw_mem_whole
@@ -149,7 +149,7 @@ def create_single_cell_dataset(fov_dataset, output_dir, rotate_auto=False):
             seg_non_mem = apply_function_to_all_channels(seg_non_mem, inherit_labels_from_cell)
 
             seg_non_mem = apply_function_to_all_channels(seg_non_mem, resize_to_mem_raw)
-            seg_whole = np.concatenate([mem_seg_whole, seg_non_mem], axis=0)
+            seg_whole = np.insert(seg_non_mem, row.cell_seg, mem_seg_whole, axis=0)
 
         else:
             seg_whole = mem_seg_whole
@@ -164,13 +164,13 @@ def create_single_cell_dataset(fov_dataset, output_dir, rotate_auto=False):
             label_dir = current_fov_dir / f'{label}'
             label_dir.mkdir(parents=True, exist_ok=True)
             mem_seg = mem_seg_whole == label
-            seg_whole = seg_whole == label
+            all_seg = seg_whole == label
             print('single cell shape is ', mem_seg.shape)
 
             # Crop all channels to cell_seg roi
             roi = create_cropping_roi(np.squeeze(mem_seg))
             crop_to_mem_seg = partial(crop_to_roi, roi=roi)
-            seg_img = seg_whole.astype(np.uint8)
+            seg_img = all_seg.astype(np.uint8)
             seg_img = apply_function_to_all_channels(seg_img, crop_to_mem_seg)
             seg_img[seg_img > 0] = 255
             print('cropped single cell shape is ', seg_img.shape)
@@ -242,27 +242,26 @@ def create_single_cell_dataset(fov_dataset, output_dir, rotate_auto=False):
 def execute_step(config):
     step_name = 'prep_single_cells'
     project_dir = Path(config['create_fov_dataset']['output_dir'])
-    output_dir = project_dir / 'prep_single_cells'
+    step_dir = create_step_dir(project_dir, step_name)
     rotate_auto = config['create_fov_dataset']['autorotate']
+
     if rotate_auto:
         path_to_fov_dataset = Path(config['create_fov_dataset']['output_dir']) / 'fov_dataset_with_rot.csv'
 
     else:
         path_to_fov_dataset = Path(config['create_fov_dataset']['output_dir']) / 'fov_dataset.csv'
 
-    output_dir.mkdir(parents=True, exist_ok=True)
-
     # Save command line arguments into logfile
-    logger = step_logger(step_name, output_dir)
+    logger = step_logger(step_name, step_dir)
     logger.info(sys.argv)
 
     assert path_to_fov_dataset.exists
     fov_dataset = pd.read_csv(path_to_fov_dataset)
-    cell_meta = create_single_cell_dataset(fov_dataset, output_dir)
+    cell_meta = create_single_cell_dataset(fov_dataset, step_dir)
 
     # Save cell dataset (every row is a cell)
     df_cell_meta = pd.DataFrame(cell_meta)
-    path_to_manifest = output_dir / 'cell_manifest.csv'
+    path_to_manifest = step_dir / 'cell_manifest.csv'
     df_cell_meta.to_csv(path_to_manifest)
 
 

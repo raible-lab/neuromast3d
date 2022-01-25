@@ -9,8 +9,6 @@ and does not try to align cells to an organismal axis (e.g. A/P, D/V).
 
 import ast
 import argparse
-import logging
-import os
 import pathlib
 import sys
 
@@ -19,15 +17,12 @@ from aicsimageio.writers import ome_tiff_writer
 from aicsimageprocessing import resize, resize_to
 import numpy as np
 import pandas as pd
-from scipy.stats import skew
 from skimage.morphology import binary_closing, ball
-from skimage.measure import regionprops
-from skimage.transform import rotate
 from sklearn.decomposition import PCA
 import scipy.ndimage as ndi
 import yaml
 
-from neuromast3d.prep_single_cells.create_fov_dataset import read_raw_and_seg_img, check_dir_exists, step_logger
+from neuromast3d.step_utils import read_raw_and_seg_img, check_dir_exists, step_logger, create_step_dir
 from neuromast3d.alignment.utils import rotate_image_2d_custom
 
 
@@ -96,6 +91,7 @@ def calculate_alignment_angle_2d(
 
 
 def align_cell_xy_long_axis_to_z_axis(raw_cell, seg_cell):
+    assert raw_cell.ndim == 4 and seg_cell.ndim == 4
     _, z, y, x = np.nonzero(seg_cell)
     xz = np.hstack([x.reshape(-1, 1), z.reshape(-1, 1)])
     pca = PCA(n_components=2)
@@ -121,9 +117,9 @@ def create_fov_dataframe_from_cell_dataframe(cell_df):
 def save_raw_and_seg_cell(raw_img, seg_img, current_cell_dir):
     pathlib.Path(current_cell_dir).mkdir(parents=True, exist_ok=True)
     seg_path = f'{current_cell_dir}/segmentation.ome.tif'
-    crop_seg_aligned_path = pathlib.path(seg_path)
+    crop_seg_aligned_path = pathlib.Path(seg_path)
     writer = ome_tiff_writer.OmeTiffWriter(crop_seg_aligned_path)
-    writer.save(seg_img, dimension_order='czyx')
+    writer.save(seg_img, dimension_order='CZYX')
 
     raw_path = f'{current_cell_dir}/raw.ome.tif'
     crop_raw_aligned_path = pathlib.Path(raw_path)
@@ -142,7 +138,6 @@ def execute_step(config):
 
     check_dir_exists(project_dir)
 
-    # Read the manifest to align cells for this run
     cell_df = pd.read_csv(path_to_manifest, index_col=0)
 
     # Since we are applying alignment, rename old crop_seg and crop_raw
@@ -153,22 +148,17 @@ def execute_step(config):
         }
     )
 
-    # Create dir to save for this step
-    step_local_path = pathlib.Path(f'{project_dir}/alignment')
-    step_local_path.mkdir(parents=True, exist_ok=True)
+    step_dir = create_step_dir(project_dir, step_name)
 
-    # Save command line arguments to logfile for future reference
-    logger = step_logger(step_name, step_local_path)
+    logger = step_logger(step_name, step_dir)
     logger.info(sys.argv)
 
-    # Create fov dataframe
     fov_df = create_fov_dataframe_from_cell_dataframe(cell_df)
 
     # Calculate neuromast centroid and rotation angles
     nm_centroids = []
     cell_angles = []
 
-    # Loop through and interpolate each neuromast (fov)
     for fov in fov_df.itertuples(index=False):
         seg_reader = AICSImage(fov.fov_seg_path)
 
@@ -240,7 +230,7 @@ def execute_step(config):
                 raw_cell_aligned, seg_cell_aligned = align_cell_xy_long_axis_to_z_axis(raw_cell_aligned, seg_cell_aligned)
 
             # Save aligned single cell mask and raw image
-            current_cell_dir = f'{step_local_path}/{fov.fov_id}/{label}'
+            current_cell_dir = f'{step_dir}/{fov.fov_id}/{label}'
             raw_path, seg_path = save_raw_and_seg_cell(raw_cell_aligned, seg_cell_aligned, current_cell_dir)
 
             # Save angle matched to cell_id
@@ -261,7 +251,7 @@ def execute_step(config):
     # Save angles to cell manifest
     angle_df = pd.DataFrame(cell_angles)
     cell_df = cell_df.merge(angle_df, on='CellId')
-    cell_df.to_csv(f'{step_local_path}/manifest.csv')
+    cell_df.to_csv(f'{step_dir}/manifest.csv')
 
 
 def main():
