@@ -8,6 +8,7 @@ from pathlib import Path
 import sys
 
 from aicsimageio import AICSImage
+from aicsimageio.writers import ome_tiff_writer
 
 
 def check_dir_exists(path_to_dir):
@@ -41,3 +42,16 @@ def read_raw_and_seg_img(path_to_raw, path_to_seg):
     seg_img = reader.get_image_data('CZYX', S=0, T=0)
     return raw_img, seg_img
 
+
+def save_raw_and_seg_cell(raw_img, seg_img, current_cell_dir):
+    Path(current_cell_dir).mkdir(parents=True, exist_ok=True)
+    seg_path = f'{current_cell_dir}/segmentation.ome.tif'
+    crop_seg_aligned_path = Path(seg_path)
+    writer = ome_tiff_writer.OmeTiffWriter(crop_seg_aligned_path)
+    writer.save(seg_img, dimension_order='CZYX')
+
+    raw_path = f'{current_cell_dir}/raw.ome.tif'
+    crop_raw_aligned_path = Path(raw_path)
+    writer = ome_tiff_writer.OmeTiffWriter(crop_raw_aligned_path)
+    writer.save(raw_img, dimension_order='CZYX')
+    return raw_path, seg_path

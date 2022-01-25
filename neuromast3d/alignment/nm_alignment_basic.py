@@ -22,7 +22,7 @@ from sklearn.decomposition import PCA
 import scipy.ndimage as ndi
 import yaml
 
-from neuromast3d.step_utils import read_raw_and_seg_img, check_dir_exists, step_logger, create_step_dir
+from neuromast3d.step_utils import read_raw_and_seg_img, check_dir_exists, step_logger, create_step_dir, save_raw_and_seg_cell
 from neuromast3d.alignment.utils import rotate_image_2d_custom
 
 
@@ -112,20 +112,6 @@ def create_fov_dataframe_from_cell_dataframe(cell_df):
         inplace=True
     )
     return fov_df
-
-
-def save_raw_and_seg_cell(raw_img, seg_img, current_cell_dir):
-    pathlib.Path(current_cell_dir).mkdir(parents=True, exist_ok=True)
-    seg_path = f'{current_cell_dir}/segmentation.ome.tif'
-    crop_seg_aligned_path = pathlib.Path(seg_path)
-    writer = ome_tiff_writer.OmeTiffWriter(crop_seg_aligned_path)
-    writer.save(seg_img, dimension_order='CZYX')
-
-    raw_path = f'{current_cell_dir}/raw.ome.tif'
-    crop_raw_aligned_path = pathlib.Path(raw_path)
-    writer = ome_tiff_writer.OmeTiffWriter(crop_raw_aligned_path)
-    writer.save(raw_img, dimension_order='CZYX')
-    return raw_path, seg_path
 
 
 def execute_step(config):

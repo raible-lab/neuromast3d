@@ -16,7 +16,7 @@ import pandas as pd
 import yaml
 
 from neuromast3d.prep_single_cells.utils import apply_3d_rotation
-from neuromast3d.step_utils import step_logger, read_raw_and_seg_img, create_step_dir
+from neuromast3d.step_utils import step_logger, read_raw_and_seg_img, create_step_diri, save_raw_and_seg_cell
 
 
 def inherit_labels(dna_mask_bw, mem_seg):
@@ -96,6 +96,57 @@ def apply_function_to_all_channels(image, function):
     return img_processed
 
 
+def preprocess_fov(row):
+
+    raw_img, seg_img = read_raw_and_seg_img(row.SourceReadPath, row.SegmentationReadPath)
+    mem_raw = raw_img[row.membrane, :, :, :]
+    mem_seg = seg_img[row.cell_seg, :, :, :]
+    xy_res, _, z_res = literal_eval(row.pixel_size_xyz)
+
+    # Rescale images to isotropic dimenstions
+    raw_mem_whole = resize(
+            mem_raw,
+            (z_res / xy_res, xy_res / xy_res, xy_res / xy_res),
+            method='bilinear'
+    ).astype(np.uint16)
+
+    resize_to_mem_raw = partial(resize_to, out_size=raw_mem_whole.shape, method='nearest')
+    mem_seg_whole = resize_to_mem_raw(mem_seg)
+
+    raw_mem_whole = np.expand_dims(raw_mem_whole, axis=0)
+    mem_seg_whole = np.expand_dims(mem_seg_whole, axis=0)
+
+    if raw_img.shape[0] > 1:
+        raw_non_mem = np.delete(raw_img, row.membrane, 0)
+        resize_to_isotropic = partial(
+                resize,
+                factor=(z_res / xy_res, xy_res / xy_res, xy_res / xy_res),
+                method='bilinear'
+        )
+        raw_non_mem = apply_function_to_all_channels(raw_non_mem, resize_to_isotropic).astype(np.uint16)
+        raw_whole = np.insert(raw_non_mem, row.membrane, raw_mem_whole, axis=0)
+
+    else:
+        raw_whole = raw_mem_whole
+
+    if seg_img.shape[0] > 1:
+        seg_non_mem = np.delete(seg_img, row.cell_seg, 0)
+
+        discard_labels_outside_cell = partial(discard_labels_outside_mask, mask_labels=mem_seg)
+        seg_non_mem = apply_function_to_all_channels(seg_non_mem, discard_labels_outside_cell)
+
+        inherit_labels_from_cell = partial(inherit_labels, mem_seg=mem_seg)
+        seg_non_mem = apply_function_to_all_channels(seg_non_mem, inherit_labels_from_cell)
+
+        seg_non_mem = apply_function_to_all_channels(seg_non_mem, resize_to_mem_raw)
+        seg_whole = np.insert(seg_non_mem, row.cell_seg, mem_seg_whole, axis=0)
+
+    else:
+        seg_whole = mem_seg_whole
+
+    return raw_whole, seg_whole, mem_seg_whole
+
+
 def create_single_cell_dataset(fov_dataset, output_dir, rotate_auto=False):
     # Create dir for single cells to go into
     single_cell_dir = output_dir / 'single_cell_masks'
@@ -108,51 +159,7 @@ def create_single_cell_dataset(fov_dataset, output_dir, rotate_auto=False):
         current_fov_dir = single_cell_dir / f'{row.NM_ID}'
         current_fov_dir.mkdir(parents=True, exist_ok=True)
 
-        raw_img, seg_img = read_raw_and_seg_img(row.SourceReadPath, row.SegmentationReadPath)
-        mem_raw = raw_img[row.membrane, :, :, :]
-        mem_seg = seg_img[row.cell_seg, :, :, :]
-        xy_res, _, z_res = literal_eval(row.pixel_size_xyz)
-
-        # Rescale images to isotropic dimenstions
-        raw_mem_whole = resize(
-                mem_raw,
-                (z_res / xy_res, xy_res / xy_res, xy_res / xy_res),
-                method='bilinear'
-        ).astype(np.uint16)
-
-        resize_to_mem_raw = partial(resize_to, out_size=raw_mem_whole.shape, method='nearest')
-        mem_seg_whole = resize_to_mem_raw(mem_seg)
-
-        raw_mem_whole = np.expand_dims(raw_mem_whole, axis=0)
-        mem_seg_whole = np.expand_dims(mem_seg_whole, axis=0)
-
-        if raw_img.shape[0] > 1:
-            raw_non_mem = np.delete(raw_img, row.membrane, 0)
-            resize_to_isotropic = partial(
-                    resize,
-                    factor=(z_res / xy_res, xy_res / xy_res, xy_res / xy_res),
-                    method='bilinear'
-            )
-            raw_non_mem = apply_function_to_all_channels(raw_non_mem, resize_to_isotropic).astype(np.uint16)
-            raw_whole = np.insert(raw_non_mem, row.membrane, raw_mem_whole, axis=0)
-
-        else:
-            raw_whole = raw_mem_whole
-
-        if seg_img.shape[0] > 1:
-            seg_non_mem = np.delete(seg_img, row.cell_seg, 0)
-
-            discard_labels_outside_cell = partial(discard_labels_outside_mask, mask_labels=mem_seg)
-            seg_non_mem = apply_function_to_all_channels(seg_non_mem, discard_labels_outside_cell)
-
-            inherit_labels_from_cell = partial(inherit_labels, mem_seg=mem_seg)
-            seg_non_mem = apply_function_to_all_channels(seg_non_mem, inherit_labels_from_cell)
-
-            seg_non_mem = apply_function_to_all_channels(seg_non_mem, resize_to_mem_raw)
-            seg_whole = np.insert(seg_non_mem, row.cell_seg, mem_seg_whole, axis=0)
-
-        else:
-            seg_whole = mem_seg_whole
+        raw_whole, seg_whole, mem_seg_whole = preprocess_fov(row)
 
         # Remove very small cells from the list
         # TODO: this used to depend on nucleus size too
@@ -161,11 +168,10 @@ def create_single_cell_dataset(fov_dataset, output_dir, rotate_auto=False):
 
         # Crop and prep the cells
         for label in cell_label_list:
+            label = int(label)
             label_dir = current_fov_dir / f'{label}'
-            label_dir.mkdir(parents=True, exist_ok=True)
             mem_seg = mem_seg_whole == label
             all_seg = seg_whole == label
-            print('single cell shape is ', mem_seg.shape)
 
             # Crop all channels to cell_seg roi
             roi = create_cropping_roi(np.squeeze(mem_seg))
@@ -173,11 +179,8 @@ def create_single_cell_dataset(fov_dataset, output_dir, rotate_auto=False):
             seg_img = all_seg.astype(np.uint8)
             seg_img = apply_function_to_all_channels(seg_img, crop_to_mem_seg)
             seg_img[seg_img > 0] = 255
-            print('cropped single cell shape is ', seg_img.shape)
 
             # Apply tilt correction if desired
-            # TODO: should this be done here?
-            # Or should it be done during another step, i.e. alignment?
             if rotate_auto:
                 seg_img = apply_3d_rotation(
                         seg_img,
@@ -185,10 +188,6 @@ def create_single_cell_dataset(fov_dataset, output_dir, rotate_auto=False):
                         row.angle_2,
                         row.angle_3
                 )
-
-            crop_seg_path = label_dir / 'segmentation.ome.tif'
-            writer = ome_tiff_writer.OmeTiffWriter(crop_seg_path)
-            writer.save(seg_img, dimension_order='CZYX')
 
             # Crop both channels of the raw image
             raw_img = raw_whole
@@ -204,9 +203,7 @@ def create_single_cell_dataset(fov_dataset, output_dir, rotate_auto=False):
                         row.angle_3
                 )
 
-            crop_raw_path = label_dir / 'raw.ome.tif'
-            writer = ome_tiff_writer.OmeTiffWriter(crop_raw_path)
-            writer.save(raw_img, dimension_order='CZYX')
+            crop_raw_path, crop_seg_path = save_raw_and_seg_cell(raw_img, seg_img, label_dir)
 
             cell_id = f'{row.NM_ID}_{label}'
 
@@ -224,7 +221,6 @@ def create_single_cell_dataset(fov_dataset, output_dir, rotate_auto=False):
                          'crop_raw': crop_raw_path,
                          'crop_seg': crop_seg_path,
                          'pixel_size_xyz': row.pixel_size_xyz,
-                         'scale_micron': [xy_res, xy_res, xy_res],
                          'fov_id': row.NM_ID,
                          'fov_path': row.SourceReadPath,
                          'fov_seg_path': row.SegmentationReadPath,
