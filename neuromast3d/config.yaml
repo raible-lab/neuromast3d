@@ -36,11 +36,14 @@ create_fov_dataset:
         # set autorotation and, if so, the strategy to use
         autorotate: False
         output_dir: '/home/maddy/projects/claudin_gfp_5dpf_DRAQ5_1h_airy_live_2_test_subset/cvapipe_run_TEST'
-        file_ext: tiff
+
+prep_single_cells:
+        # enable/disable single cell dataset creation from fov dataset
+        state: True
 
 alignment:
         # enable/disable alignment
-        state: False
+        state: True
         # channel to use to calculate the rotation angle
         rot_ch_index: 1
         # whether to make the rotation unique

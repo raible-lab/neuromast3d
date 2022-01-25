@@ -12,7 +12,7 @@ from neuromast3d.prep_single_cells import create_fov_dataset, prep_single_cells
 
 
 def parse_cli_args():
-    parser = argparse.ArgumentParser(description='Neuromast 3d workflow script')
+    parser = argparse.ArgumentParser(description='Neuromast3d workflow script')
     parser.add_argument('config', help='path to config YAML file')
     args = parser.parse_args()
     return args
@@ -32,8 +32,7 @@ def find_steps_to_run_from_config(config):
     possible_steps = [
             'segmentation',
             'create_fov_dataset',
-            # TODO: make naming scheme consistent in config file
-            #'prep_single_cells',
+            'prep_single_cells',
             'alignment',
     ]
     steps_to_run = [step for step in possible_steps if config[f'{step}']['state']]
@@ -49,6 +48,7 @@ def run_steps(steps_to_run, config):
         output_dir = Path(config['create_fov_dataset']['output_dir'])
         save_config(config, output_dir)
         create_fov_dataset.execute_step(config)
+    if 'prep_single_cells' in steps_to_run:
         prep_single_cells.execute_step(config)
     if 'alignment' in steps_to_run:
         nm_alignment_basic.execute_step(config)
