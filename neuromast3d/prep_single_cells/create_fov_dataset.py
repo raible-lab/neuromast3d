@@ -44,6 +44,21 @@ def step_logger(step_name, output_dir):
     return logger
 
 
+def create_step_dir(project_dir: Path, step_name: str):
+    step_dir = project_dir / step_name
+    step_dir.mkdir(parents=True, exist_ok=True)
+    return step_dir
+
+
+def read_raw_and_seg_img(path_to_raw, path_to_seg):
+    reader = AICSImage(path_to_raw)
+    raw_img = reader.get_image_data('CZYX', S=0, T=0)
+
+    reader = AICSImage(path_to_seg)
+    seg_img = reader.get_image_data('CZYX', S=0, T=0)
+    return raw_img, seg_img
+
+
 def create_name_dict(raw_channel_ids, seg_channel_ids):
     name_dict = {
             'crop_raw': [*raw_channel_ids.keys()],
@@ -81,15 +96,6 @@ def create_fov_dataframe(raw_files, seg_files, og_files, raw_channel_ids, seg_ch
 
     fov_dataset = pd.DataFrame(fov_info)
     return fov_dataset
-
-
-def read_raw_and_seg_img(path_to_raw, path_to_seg):
-    reader = AICSImage(path_to_raw)
-    raw_img = reader.get_image_data('CZYX', S=0, T=0)
-
-    reader = AICSImage(path_to_seg)
-    seg_img = reader.get_image_data('CZYX', S=0, T=0)
-    return raw_img, seg_img
 
 
 def create_whole_nm_mask(seg_img, channel):
