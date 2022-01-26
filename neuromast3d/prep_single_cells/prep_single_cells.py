@@ -5,20 +5,20 @@
 
 import argparse
 from ast import literal_eval
-import logging
+from functools import partial
 from pathlib import Path
 import sys
 
+from aicsimageio.writers import ome_tiff_writer
+from aicsimageprocessing import resize, resize_to
 import numpy as np
 import pandas as pd
 import yaml
 
-from aicsimageio import AICSImage
-from aicsimageio.writers import ome_tiff_writer
-from aicsimageprocessing import resize, resize_to
-
 from neuromast3d.prep_single_cells.utils import apply_3d_rotation
-from neuromast3d.prep_single_cells.create_fov_dataset import step_logger
+from neuromast3d.prep_single_cells.create_fov_dataset import get_channel_ids
+from neuromast3d.step_utils import step_logger, read_raw_and_seg_img, create_step_dir, save_raw_and_seg_cell
+
 
 def inherit_labels(dna_mask_bw, mem_seg):
     dna_mask_label = np.zeros_like(mem_seg)
@@ -28,7 +28,17 @@ def inherit_labels(dna_mask_bw, mem_seg):
     return nuc_seg
 
 
-def remove_small_labels(mem_seg_whole, nuc_seg_whole):
+def remove_small_labels(label_img, size_threshold):
+    label_list = list(np.unique(label_img[label_img > 0]))
+    label_list_copy = label_list.copy()
+    for label in label_list:
+        single_label = label_img == label
+        if np.count_nonzero(single_label) < size_threshold:
+            label_list_copy.remove(label)
+    return label_list_copy
+
+
+def remove_small_labels_2ch(mem_seg_whole, nuc_seg_whole):
     cell_label_list = list(np.unique(mem_seg_whole[mem_seg_whole > 0]))
     cell_label_list_copy = cell_label_list.copy()
     for count, label in enumerate(cell_label_list):
@@ -48,6 +58,7 @@ def remove_small_labels(mem_seg_whole, nuc_seg_whole):
 
 
 def create_cropping_roi(mem_seg):
+    assert mem_seg.ndim == 3
     z_range = np.where(np.any(mem_seg, axis=(1, 2)))
     y_range = np.where(np.any(mem_seg, axis=(0, 2)))
     x_range = np.where(np.any(mem_seg, axis=(0, 1)))
@@ -70,31 +81,78 @@ def crop_to_roi(image, roi):
     return image
 
 
-def standardize_channel_order(row):
-    raw_structures = ['dna', 'membrane']
-    seg_structures = ['dna_seg', 'cell_seg']
-    raw_structures_reordered = [raw_structures[i] for i in [row.RawNucChannelIndex, row.RawMemChannelIndex]]
-    seg_structures_reordered = [seg_structures[i] for i in [row.SegNucChannelIndex, row.SegMemChannelIndex]]
-    return raw_structures_reordered, seg_structures_reordered
+def discard_labels_outside_mask(labels, mask_labels):
+    labels_new = labels
+    labels_new[mask_labels == 0] = 0
+    return labels_new
 
 
-def read_fov_images(row):
-    reader_raw = AICSImage(row.SourceReadPath)
-    mem_raw = reader_raw.get_image_data('ZYX', S=0, T=0, C=row.RawMemChannelIndex)
-    nuc_raw = reader_raw.get_image_data('ZYX', S=0, T=0, C=row.RawNucChannelIndex)
+def apply_function_to_all_channels(image, function):
+    # Expects 4 channel image in CZYX dim order
+    img_processed = []
+    for channel in image:
+        ch_processed = function(channel)
+        img_processed.append(ch_processed)
+    img_processed = np.array(img_processed)
+    return img_processed
 
-    reader_seg = AICSImage(row.SegmentationReadPath)
-    mem_seg = reader_seg.get_image_data('ZYX', S=0, T=0, C=row.SegMemChannelIndex)
-    nuc_seg = reader_seg.get_image_data('ZYX', S=0, T=0, C=row.SegNucChannelIndex)
-    return mem_raw, nuc_raw, mem_seg, nuc_seg
+
+def preprocess_fov(row):
+
+    raw_img, seg_img = read_raw_and_seg_img(row.SourceReadPath, row.SegmentationReadPath)
+    mem_raw = raw_img[row.membrane, :, :, :]
+    mem_seg = seg_img[row.cell_seg, :, :, :]
+    xy_res, _, z_res = literal_eval(row.pixel_size_xyz)
+
+    # Rescale images to isotropic dimenstions
+    raw_mem_whole = resize(
+            mem_raw,
+            (z_res / xy_res, xy_res / xy_res, xy_res / xy_res),
+            method='bilinear'
+    ).astype(np.uint16)
+
+    resize_to_mem_raw = partial(resize_to, out_size=raw_mem_whole.shape, method='nearest')
+    mem_seg_whole = resize_to_mem_raw(mem_seg)
+
+    raw_mem_whole = np.expand_dims(raw_mem_whole, axis=0)
+    mem_seg_whole = np.expand_dims(mem_seg_whole, axis=0)
+
+    if raw_img.shape[0] > 1:
+        raw_non_mem = np.delete(raw_img, row.membrane, 0)
+        resize_to_isotropic = partial(
+                resize,
+                factor=(z_res / xy_res, xy_res / xy_res, xy_res / xy_res),
+                method='bilinear'
+        )
+        raw_non_mem = apply_function_to_all_channels(raw_non_mem, resize_to_isotropic).astype(np.uint16)
+        raw_whole = np.insert(raw_non_mem, row.membrane, raw_mem_whole, axis=0)
+
+    else:
+        raw_whole = raw_mem_whole
+
+    if seg_img.shape[0] > 1:
+        seg_non_mem = np.delete(seg_img, row.cell_seg, 0)
+
+        discard_labels_outside_cell = partial(discard_labels_outside_mask, mask_labels=mem_seg)
+        seg_non_mem = apply_function_to_all_channels(seg_non_mem, discard_labels_outside_cell)
+
+        inherit_labels_from_cell = partial(inherit_labels, mem_seg=mem_seg)
+        seg_non_mem = apply_function_to_all_channels(seg_non_mem, inherit_labels_from_cell)
+
+        seg_non_mem = apply_function_to_all_channels(seg_non_mem, resize_to_mem_raw)
+        seg_whole = np.insert(seg_non_mem, row.cell_seg, mem_seg_whole, axis=0)
+
+    else:
+        seg_whole = mem_seg_whole
+
+    return raw_whole, seg_whole, mem_seg_whole
 
 
-def create_single_cell_dataset(fov_dataset, output_dir, rotate_auto=False):
+def create_single_cell_dataset(fov_dataset, output_dir, rotate_auto, channel_ids):
     # Create dir for single cells to go into
     single_cell_dir = output_dir / 'single_cell_masks'
     single_cell_dir.mkdir(parents=True, exist_ok=True)
 
-    # Iterate through cells in each FOV
     cell_meta = []
     for row in fov_dataset.itertuples(index=False):
 
@@ -102,104 +160,49 @@ def create_single_cell_dataset(fov_dataset, output_dir, rotate_auto=False):
         current_fov_dir = single_cell_dir / f'{row.NM_ID}'
         current_fov_dir.mkdir(parents=True, exist_ok=True)
 
-        # Get the raw and segmented FOV images
-        mem_raw, nuc_raw, mem_seg, nuc_seg = read_fov_images(row)
-
-        # Discard nuclei not included in the membrane
-        dna_mask_bw = nuc_seg
-        dna_mask_bw[mem_seg == 0] = 0
-
-        # Make nuclei labels match the cell's
-        nuc_seg = inherit_labels(dna_mask_bw, mem_seg)
-
-        # Take z_res and xy_res from fov_dataframe
-        xy_res, _, z_res = literal_eval(row.pixel_size_xyz)
-
-        # Rescale raw images to isotropic dimenstions
-        raw_nuc_whole = resize(
-                nuc_raw,
-                (z_res / xy_res, xy_res / xy_res, xy_res / xy_res),
-                method='bilinear'
-        ).astype(np.uint16)
-
-        raw_mem_whole = resize(
-                mem_raw,
-                (z_res / xy_res, xy_res / xy_res, xy_res / xy_res),
-                method='bilinear'
-        ).astype(np.uint16)
-
-        # Resize seg images to match
-        mem_seg_whole = resize_to(mem_seg, raw_mem_whole.shape, method='nearest')
-        nuc_seg_whole = resize_to(nuc_seg, raw_nuc_whole.shape, method='nearest')
+        raw_whole, seg_whole, mem_seg_whole = preprocess_fov(row)
 
         # Remove very small cells from the list
-        cell_label_list = remove_small_labels(mem_seg_whole, nuc_seg_whole)
+        # TODO: this used to depend on nucleus size too
+        # Might want to add that back in?
+        cell_label_list = remove_small_labels(mem_seg_whole, size_threshold=500)
 
         # Crop and prep the cells
         for label in cell_label_list:
+            label = int(label)
             label_dir = current_fov_dir / f'{label}'
-            label_dir.mkdir(parents=True, exist_ok=True)
             mem_seg = mem_seg_whole == label
-            nuc_seg = nuc_seg_whole == label
+            all_seg = seg_whole == label
 
-            # Make the cropping roi
-            roi = create_cropping_roi(mem_seg)
-
-            # Crop both segmentation channels to membrane roi
-            mem_seg = mem_seg.astype(np.uint8)
-            mem_seg = crop_to_roi(mem_seg, roi)
-            mem_seg[mem_seg > 0] = 255
-
-            nuc_seg = nuc_seg.astype(np.uint8)
-            nuc_seg = crop_to_roi(nuc_seg, roi)
-            nuc_seg[nuc_seg > 0] = 255
-
-            # Merge channels and save
-            seg_merged = np.stack([nuc_seg, mem_seg], axis=0)
-
-            # Apply tilt correction if desired
-            # TODO: should this be done here?
-            # Or should it be done during another step, i.e. alignment?
-            if rotate_auto:
-                seg_merged = apply_3d_rotation(
-                        seg_merged,
-                        row.angle_1,
-                        row.angle_2,
-                        row.angle_3
-                )
-
-            crop_seg_path = label_dir / 'segmentation.ome.tif'
-            writer = ome_tiff_writer.OmeTiffWriter(crop_seg_path)
-            writer.save(seg_merged, dimension_order='CZYX')
+            # Crop all channels to cell_seg roi
+            roi = create_cropping_roi(np.squeeze(mem_seg))
+            crop_to_mem_seg = partial(crop_to_roi, roi=roi)
+            seg_img = all_seg.astype(np.uint8)
+            seg_img = apply_function_to_all_channels(seg_img, crop_to_mem_seg)
+            seg_img[seg_img > 0] = 255
 
             # Crop both channels of the raw image
-            raw_nuc = crop_to_roi(raw_nuc_whole, roi)
-            raw_mem = crop_to_roi(raw_mem_whole, roi)
-
-            # Merge channels and save
-            raw_merged = np.stack([raw_nuc, raw_mem], axis=0)
+            raw_img = raw_whole
+            raw_img = apply_function_to_all_channels(raw_img, crop_to_mem_seg)
 
             # Apply tilt correction if desired
-            # Similar TODO as above applies
             if rotate_auto:
-                raw_merged = apply_3d_rotation(
-                        raw_merged,
+                seg_img = apply_3d_rotation(
+                        seg_img,
+                        row.angle_1,
+                        row.angle_2,
+                        row.angle_3
+                )
+                raw_img = apply_3d_rotation(
+                        raw_img,
                         row.angle_1,
                         row.angle_2,
                         row.angle_3
                 )
 
-            crop_raw_path = label_dir / 'raw.ome.tif'
-            writer = ome_tiff_writer.OmeTiffWriter(crop_raw_path)
-            writer.save(raw_merged, dimension_order='CZYX')
-            cell_id = f'{row.NM_ID}_{label}'
+            crop_raw_path, crop_seg_path = save_raw_and_seg_cell(raw_img, seg_img, label_dir)
 
-            # Add name dict - may need to alter for 3 channel images
-            raw_structures, seg_structures = standardize_channel_order(row)
-            name_dict = {
-                     'crop_raw': raw_structures,
-                     'crop_seg': seg_structures,
-             }
+            cell_id = f'{row.NM_ID}_{label}'
 
             # If no structure name, add NoStr as a placeholder for future steps
             # Note: avoid using NA or other pandas default_na_values
@@ -215,16 +218,12 @@ def create_single_cell_dataset(fov_dataset, output_dir, rotate_auto=False):
                          'crop_raw': crop_raw_path,
                          'crop_seg': crop_seg_path,
                          'pixel_size_xyz': row.pixel_size_xyz,
-                         'scale_micron': [xy_res, xy_res, xy_res],
                          'fov_id': row.NM_ID,
                          'fov_path': row.SourceReadPath,
                          'fov_seg_path': row.SegmentationReadPath,
-                         'name_dict': name_dict,
+                         'name_dict': row.name_dict,
                          'structure_name': structure_name,
-                         'RawNucChannelIndex': row.RawNucChannelIndex,
-                         'RawMemChannelIndex': row.RawMemChannelIndex,
-                         'SegNucChannelIndex': row.SegNucChannelIndex,
-                         'SegMemChannelIndex': row.SegMemChannelIndex
+                         **channel_ids
                     }
             )
     return cell_meta
@@ -232,34 +231,29 @@ def create_single_cell_dataset(fov_dataset, output_dir, rotate_auto=False):
 
 def execute_step(config):
     step_name = 'prep_single_cells'
-    project_dir = Path(config['create_fov_dataset']['output_dir'])
-    output_dir = project_dir / 'prep_single_cells'
+    project_dir = Path(config['project_dir'])
+    step_dir = create_step_dir(project_dir, step_name)
     rotate_auto = config['create_fov_dataset']['autorotate']
+    raw_channel_ids, seg_channel_ids = get_channel_ids(config['channels'])
+    channel_ids = {**raw_channel_ids, **seg_channel_ids}
+
     if rotate_auto:
-        path_to_fov_dataset = Path(config['create_fov_dataset']['output_dir']) / 'fov_dataset_with_rot.csv'
+        path_to_fov_dataset = project_dir / 'fov_dataset_with_rot.csv'
 
     else:
-        path_to_fov_dataset = Path(config['create_fov_dataset']['output_dir']) / 'fov_dataset.csv'
-
-    # Create destination directory if it doesn't exist
-    output_dir.mkdir(parents=True, exist_ok=True)
+        path_to_fov_dataset = project_dir / 'fov_dataset.csv'
 
     # Save command line arguments into logfile
-    logger = step_logger(step_name, output_dir)
+    logger = step_logger(step_name, step_dir)
     logger.info(sys.argv)
 
-    # Check path to fov dataset exists
     assert path_to_fov_dataset.exists
-
-    # Read fov dataset
     fov_dataset = pd.read_csv(path_to_fov_dataset)
-
-    # Create the cell dataset
-    cell_meta = create_single_cell_dataset(fov_dataset, output_dir)
+    cell_meta = create_single_cell_dataset(fov_dataset, step_dir, rotate_auto, channel_ids)
 
     # Save cell dataset (every row is a cell)
     df_cell_meta = pd.DataFrame(cell_meta)
-    path_to_manifest = output_dir / 'cell_manifest.csv'
+    path_to_manifest = step_dir / 'cell_manifest.csv'
     df_cell_meta.to_csv(path_to_manifest)
 
 
