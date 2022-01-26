@@ -8,11 +8,9 @@ etc.
 """
 
 import argparse
-import logging
 from pathlib import Path
 import re
 import sys
-from typing import Tuple
 
 from aicsimageio import AICSImage
 from aicsimageio.writers import ome_tiff_writer
@@ -126,9 +124,9 @@ def execute_step(config):
     step_name = 'create_fov_dataset'
 
     original_dir = Path(config['create_fov_dataset']['original_dir'])
-    raw_dir = Path(config['segmentation']['raw_dir'])
+    raw_dir = Path(config['raw_dir'])
     seg_dir = Path(config['create_fov_dataset']['seg_dir'])
-    output_dir = Path(config['create_fov_dataset']['output_dir'])
+    output_dir = Path(config['project_dir'])
     rotate_auto = config['create_fov_dataset']['autorotate']
     raw_channel_ids, seg_channel_ids = get_channel_ids(config['channels'])
 
@@ -173,6 +171,7 @@ def main():
     args = parser.parse_args()
     config = yaml.load(open(args.config), Loader=yaml.Loader)
     execute_step(config)
+
 
 if __name__ == '__main__':
     main()

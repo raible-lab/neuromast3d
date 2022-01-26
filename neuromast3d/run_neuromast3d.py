@@ -40,13 +40,11 @@ def find_steps_to_run_from_config(config):
 
 
 def run_steps(steps_to_run, config):
+    output_dir = Path(config['project_dir'])
+    save_config(config, output_dir)
     if 'segmentation' in steps_to_run:
-        output_dir = Path(config['segmentation']['output_dir'])
-        save_config(config, output_dir)
         dual_channel_annotator.main()
     if 'create_fov_dataset' in steps_to_run:
-        output_dir = Path(config['create_fov_dataset']['output_dir'])
-        save_config(config, output_dir)
         create_fov_dataset.execute_step(config)
     if 'prep_single_cells' in steps_to_run:
         prep_single_cells.execute_step(config)

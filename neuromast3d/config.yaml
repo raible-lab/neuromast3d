@@ -1,4 +1,6 @@
 # Channel indices for raw and seg images
+# Note: membrane in raw and cell_seg in seg are required
+# All others are optional and their names can be changed
 channels:
         raw_channels:
                 nucleus: 0
@@ -10,13 +12,17 @@ channels:
                 nuc_seg_copy: 1
                 cell_seg: 2
 
+
+# Directory in which to save results
+# Individual steps will create their own subdirs to save within this
+project_dir: '/home/maddy/projects/three_ch_test/cvapipe_run_TEST'
+
+# Directory containing raw images
+raw_dir: '/home/maddy/projects/three_ch_test/stack_aligned'
+
 segmentation:
         # enable/disable instance segmentation step
         state: False
-        # what to segment - cell, nuc, or cellnuc (both)
-        structure: cellnuc
-        # path to directory containing raw images to process
-        raw_dir: '/home/maddy/projects/three_ch_test/stack_aligned'
         # path to nuclear mask predictions directory
         nuc_pred_dir: '/home/maddy/projects/claudin_gfp_5dpf_DRAQ5_1h_airy_live_2/nuc_model_iter2_results_checkpoint_100'
         nuc_pred_threshold: 0.6
@@ -37,7 +43,6 @@ create_fov_dataset:
         seg_dir: '/home/maddy/projects/three_ch_test/segmentations'
         # set autorotation and, if so, the strategy to use
         autorotate: False
-        output_dir: '/home/maddy/projects/three_ch_test/cvapipe_run_TEST'
 
 prep_single_cells:
         # enable/disable single cell dataset creation from fov dataset

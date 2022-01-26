@@ -16,7 +16,8 @@ import pandas as pd
 import yaml
 
 from neuromast3d.prep_single_cells.utils import apply_3d_rotation
-from neuromast3d.step_utils import step_logger, read_raw_and_seg_img, create_step_diri, save_raw_and_seg_cell
+from neuromast3d.prep_single_cells.create_fov_dataset import get_channel_ids
+from neuromast3d.step_utils import step_logger, read_raw_and_seg_img, create_step_dir, save_raw_and_seg_cell
 
 
 def inherit_labels(dna_mask_bw, mem_seg):
@@ -147,7 +148,7 @@ def preprocess_fov(row):
     return raw_whole, seg_whole, mem_seg_whole
 
 
-def create_single_cell_dataset(fov_dataset, output_dir, rotate_auto=False):
+def create_single_cell_dataset(fov_dataset, output_dir, rotate_auto, channel_ids):
     # Create dir for single cells to go into
     single_cell_dir = output_dir / 'single_cell_masks'
     single_cell_dir.mkdir(parents=True, exist_ok=True)
@@ -180,6 +181,10 @@ def create_single_cell_dataset(fov_dataset, output_dir, rotate_auto=False):
             seg_img = apply_function_to_all_channels(seg_img, crop_to_mem_seg)
             seg_img[seg_img > 0] = 255
 
+            # Crop both channels of the raw image
+            raw_img = raw_whole
+            raw_img = apply_function_to_all_channels(raw_img, crop_to_mem_seg)
+
             # Apply tilt correction if desired
             if rotate_auto:
                 seg_img = apply_3d_rotation(
@@ -188,14 +193,6 @@ def create_single_cell_dataset(fov_dataset, output_dir, rotate_auto=False):
                         row.angle_2,
                         row.angle_3
                 )
-
-            # Crop both channels of the raw image
-            raw_img = raw_whole
-            raw_img = apply_function_to_all_channels(raw_img, crop_to_mem_seg)
-
-            # Apply tilt correction if desired
-            # Similar TODO as above applies
-            if rotate_auto:
                 raw_img = apply_3d_rotation(
                         raw_img,
                         row.angle_1,
@@ -226,10 +223,7 @@ def create_single_cell_dataset(fov_dataset, output_dir, rotate_auto=False):
                          'fov_seg_path': row.SegmentationReadPath,
                          'name_dict': row.name_dict,
                          'structure_name': structure_name,
-                         'RawNucChannelIndex': row.nucleus,
-                         'RawMemChannelIndex': row.membrane,
-                         'SegNucChannelIndex': row.nucleus_seg,
-                         'SegMemChannelIndex': row.cell_seg
+                         **channel_ids
                     }
             )
     return cell_meta
@@ -237,15 +231,17 @@ def create_single_cell_dataset(fov_dataset, output_dir, rotate_auto=False):
 
 def execute_step(config):
     step_name = 'prep_single_cells'
-    project_dir = Path(config['create_fov_dataset']['output_dir'])
+    project_dir = Path(config['project_dir'])
     step_dir = create_step_dir(project_dir, step_name)
     rotate_auto = config['create_fov_dataset']['autorotate']
+    raw_channel_ids, seg_channel_ids = get_channel_ids(config['channels'])
+    channel_ids = {**raw_channel_ids, **seg_channel_ids}
 
     if rotate_auto:
-        path_to_fov_dataset = Path(config['create_fov_dataset']['output_dir']) / 'fov_dataset_with_rot.csv'
+        path_to_fov_dataset = project_dir / 'fov_dataset_with_rot.csv'
 
     else:
-        path_to_fov_dataset = Path(config['create_fov_dataset']['output_dir']) / 'fov_dataset.csv'
+        path_to_fov_dataset = project_dir / 'fov_dataset.csv'
 
     # Save command line arguments into logfile
     logger = step_logger(step_name, step_dir)
@@ -253,7 +249,7 @@ def execute_step(config):
 
     assert path_to_fov_dataset.exists
     fov_dataset = pd.read_csv(path_to_fov_dataset)
-    cell_meta = create_single_cell_dataset(fov_dataset, step_dir)
+    cell_meta = create_single_cell_dataset(fov_dataset, step_dir, rotate_auto, channel_ids)
 
     # Save cell dataset (every row is a cell)
     df_cell_meta = pd.DataFrame(cell_meta)

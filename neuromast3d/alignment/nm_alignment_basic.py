@@ -13,7 +13,6 @@ import pathlib
 import sys
 
 from aicsimageio import AICSImage
-from aicsimageio.writers import ome_tiff_writer
 from aicsimageprocessing import resize, resize_to
 import numpy as np
 import pandas as pd
@@ -116,7 +115,7 @@ def create_fov_dataframe_from_cell_dataframe(cell_df):
 
 def execute_step(config):
     step_name = 'alignment'
-    project_dir = pathlib.Path(config['create_fov_dataset']['output_dir'])
+    project_dir = pathlib.Path(config['project_dir'])
     path_to_manifest = project_dir / 'prep_single_cells/cell_manifest.csv'
     rot_ch_index = config['alignment']['rot_ch_index']
     make_unique = config['alignment']['make_unique']
