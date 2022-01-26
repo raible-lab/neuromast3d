@@ -3,22 +3,18 @@
 # All others are optional and their names can be changed
 channels:
         raw_channels:
-                nucleus: 0
-                nuc_copy: 1
-                membrane: 2
+                membrane: 0
 
         seg_channels:
-                nucleus_seg: 0
-                nuc_seg_copy: 1
-                cell_seg: 2
+                cell_seg: 0
 
 
 # Directory in which to save results
 # Individual steps will create their own subdirs to save within this
-project_dir: '/home/maddy/projects/three_ch_test/cvapipe_run_TEST'
+project_dir: '/home/maddy/projects/one_ch_test/cvapipe_run_TEST'
 
 # Directory containing raw images
-raw_dir: '/home/maddy/projects/three_ch_test/stack_aligned'
+raw_dir: '/home/maddy/projects/one_ch_test/stack_aligned'
 
 segmentation:
         # enable/disable instance segmentation step
@@ -38,9 +34,9 @@ create_fov_dataset:
         # enable/disable fov dataset creation
         state: True
         # directory with original .czi images to get pixel size
-        original_dir: '/home/maddy/projects/three_ch_test/original'
+        original_dir: '/home/maddy/projects/one_ch_test/original'
         # directory with segmented/label images
-        seg_dir: '/home/maddy/projects/three_ch_test/segmentations'
+        seg_dir: '/home/maddy/projects/one_ch_test/segmentations'
         # set autorotation and, if so, the strategy to use
         autorotate: False
 
@@ -52,7 +48,7 @@ alignment:
         # enable/disable alignment
         state: True
         # channel to use to calculate the rotation angle
-        rot_ch_index: 2
+        rot_ch_index: 0
         # whether to make the rotation unique
         make_unique: True
         # alignment method to use (xy_only or xy_xz)
