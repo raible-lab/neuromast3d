@@ -7,7 +7,8 @@ cell dataset for this pipeline, and also contains some functions to
 visualize the results.
 
 ## How to use this code
-Currently, the code is run as a series of individual steps.
+Currently, the code can be run as a workflow (using the provided config.yaml file),
+or as a series of individual steps.
 The order of the pipeline goes like so:
  - segmentation (optional)
  - prep_single_cells
