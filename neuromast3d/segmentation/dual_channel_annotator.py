@@ -42,9 +42,6 @@ def main():
     config = yaml.load(open(args.config), Loader=yaml.Loader)
 
     raw_dir = Path(config['segmentation']['raw_dir'])
-    # TODO: figure out how to handle the situation of having nuclei prelabeled
-    # or providing already segmented ones
-    # For now, assume nuclei are always labeled beforehand
     nuc_labels_dir = Path(config['segmentation']['nuc_pred_dir'])
     mem_pred_dir = Path(config['segmentation']['mem_pred_dir'])
     output_dir = Path(config['segmentation']['output_dir'])
