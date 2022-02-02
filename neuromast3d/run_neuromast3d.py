@@ -6,7 +6,7 @@ from pathlib import Path
 
 import yaml
 
-from neuromast3d.segmentation import dual_channel_annotator
+from neuromast3d.segmentation import dual_channel_annotator, nucleus_segmentation
 from neuromast3d.alignment import nm_alignment_basic
 from neuromast3d.prep_single_cells import create_fov_dataset, prep_single_cells
 
@@ -30,7 +30,8 @@ def save_config(config, output_dir):
 
 def find_steps_to_run_from_config(config):
     possible_steps = [
-            'segmentation',
+            'nucleus_segmentation',
+            'membrane_segmentation',
             'create_fov_dataset',
             'prep_single_cells',
             'alignment',
@@ -42,14 +43,17 @@ def find_steps_to_run_from_config(config):
 def run_steps(steps_to_run, config):
     output_dir = Path(config['project_dir'])
     save_config(config, output_dir)
-    if 'segmentation' in steps_to_run:
-        dual_channel_annotator.main()
+    if 'nucleus_segmentation' in steps_to_run:
+        nucleus_segmentation.execute_step(config)
+    if 'membrane_segmentation' in steps_to_run:
+        dual_channel_annotator.execute_step(config)
     if 'create_fov_dataset' in steps_to_run:
         create_fov_dataset.execute_step(config)
     if 'prep_single_cells' in steps_to_run:
         prep_single_cells.execute_step(config)
     if 'alignment' in steps_to_run:
         nm_alignment_basic.execute_step(config)
+
 
 def main():
     args = parse_cli_args()

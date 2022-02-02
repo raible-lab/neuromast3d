@@ -3,7 +3,10 @@
 # All others are optional and their names can be changed
 channels:
         raw_channels:
-                membrane: 0
+                nucleus: 0
+                sost_nuc: 1
+                membrane: 2
+
 
         seg_channels:
                 cell_seg: 0
@@ -11,19 +14,34 @@ channels:
 
 # Directory in which to save results
 # Individual steps will create their own subdirs to save within this
-project_dir: '/home/maddy/projects/one_ch_test/cvapipe_run_TEST'
+project_dir: '/home/maddy/projects/sost_nlsEos_claudin_gfp_5dpf_DRAQ5_Airy/stack_aligned/cvapipe_run_test'
 
 # Directory containing raw images
-raw_dir: '/home/maddy/projects/one_ch_test/stack_aligned'
+raw_dir: '/home/maddy/projects/sost_nlsEos_claudin_gfp_5dpf_DRAQ5_Airy/stack_aligned'
 
-segmentation:
-        # enable/disable instance segmentation step
-        state: False
-        # path to nuclear mask predictions directory
-        nuc_pred_dir: '/home/maddy/projects/claudin_gfp_5dpf_DRAQ5_1h_airy_live_2/nuc_model_iter2_results_checkpoint_100'
+nucleus_segmentation:
+        # enable/disable nucleus segmentation step
+        state: True
+        # path to directory with nucleus mask predictions
+        nuc_pred_dir: '/home/maddy/projects/sost_nlsEos_claudin_gfp_5dpf_DRAQ5_Airy/nuc_model_2_results'
         nuc_pred_threshold: 0.6
-        # if nuclei segs are already labeled images, set this to to True
-        is_nuc_labeled: False
+        # parameters for distance transform watershed
+        sigma: 6
+        min_distance: 12
+        # whether to use boundary predictions for nucleus splitting
+        split_nuclei:
+                state: True
+                boundary_dir: '/home/maddy/projects/sost_nlsEos_claudin_gfp_5dpf_DRAQ5_Airy/mem_model_3_results'
+                mem_pred_threshold: 0.4
+                # set mode to automatic or interactive
+                mode: 'interactive'
+        output_dir: '/home/maddy/projects/sost_nlsEos_claudin_gfp_5dpf_DRAQ5_Airy/nuc_labels'
+
+membrane_segmentation:
+        # enable/disable membrane segmentation step
+        state: False
+        # path to nuclear labels
+        nuc_labels_dir: 
         # path to directory with membrane boundary predictions
         mem_pred_dir: '/home/maddy/projects/claudin_gfp_5dpf_DRAQ5_1h_airy_live_2/mem_model_3_results'
         mem_pred_threshold: 0.4
@@ -32,7 +50,7 @@ segmentation:
 
 create_fov_dataset:
         # enable/disable fov dataset creation
-        state: True
+        state: False
         # directory with original .czi images to get pixel size
         original_dir: '/home/maddy/projects/one_ch_test/original'
         # directory with segmented/label images
@@ -42,11 +60,11 @@ create_fov_dataset:
 
 prep_single_cells:
         # enable/disable single cell dataset creation from fov dataset
-        state: True
+        state: False
 
 alignment:
         # enable/disable alignment
-        state: True
+        state: False
         # channel to use to calculate the rotation angle
         rot_ch_index: 0
         # whether to make the rotation unique

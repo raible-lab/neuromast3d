@@ -30,21 +30,11 @@ from skimage.segmentation import find_boundaries, watershed
 import yaml
 
 
-def main():
-    # Command line arguments
-    parser = argparse.ArgumentParser(
-            description='Interactive membrane/nucleus segmentation'
-    )
-    parser.add_argument('config', help='path to config file for segmentation')
-    args = parser.parse_args()
-
-    # Parse config
-    config = yaml.load(open(args.config), Loader=yaml.Loader)
-
-    raw_dir = Path(config['segmentation']['raw_dir'])
-    nuc_labels_dir = Path(config['segmentation']['nuc_pred_dir'])
-    mem_pred_dir = Path(config['segmentation']['mem_pred_dir'])
-    output_dir = Path(config['segmentation']['output_dir'])
+def execute_step(config):
+    raw_dir = Path(config['membrane_segmentation']['raw_dir'])
+    nuc_labels_dir = Path(config['membrane_segmentation']['nuc_labels_dir'])
+    mem_pred_dir = Path(config['membrane_segmentation']['mem_pred_dir'])
+    output_dir = Path(config['membrane_segmentation']['output_dir'])
 
     # Create output directory
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -280,6 +270,17 @@ def main():
     open_next_image.img_id.changed.connect(update_img_id)
 
     napari.run()
+
+
+def main():
+    # Command line arguments
+    parser = argparse.ArgumentParser(
+            description='Interactive membrane/nucleus segmentation'
+    )
+    parser.add_argument('config', help='path to config file for segmentation')
+    args = parser.parse_args()
+    config = yaml.load(open(args.config), Loader=yaml.Loader)
+    execute_step(config)
 
 
 if __name__ == '__main__':

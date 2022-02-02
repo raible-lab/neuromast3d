@@ -16,39 +16,29 @@ from aicsimageio import AICSImage
 from aicsimageio.writers import ome_tiff_writer
 from magicgui import magicgui
 import napari
-from napari.layers import Image, Labels, Layer
+from napari.layers import Image, Labels, Layer, Shapes
 from napari.types import ImageData
 import numpy as np
 from skimage import morphology, filters
+import yaml
 
 from neuromast3d.segmentation.utils import dt_watershed
 from neuromast3d.step_utils import check_dir_exists
 
 
-def main():
-    # Command line arguments
-    parser = argparse.ArgumentParser(
-            description='DT watershed segmentation of nucleus mask'
-    )
-    parser.add_argument('raw_dir', help='directory containing raw input images')
-    parser.add_argument('mask_dir', help='directory containing nuclear masks')
-    parser.add_argument('sigma', type=int, help='sigma to use for Gaussian blur of \
-            distance transform')
-    parser.add_argument('min_distance', type=int, help='min_distance parameter for \
-            peak_local_max function')
-    parser.add_argument('output_dir', help='desired output directory')
-    parser.add_argument('-n', '--nuc_threshold', type=float, help='threshold to use \
-            if providing raw nuc predictions instead of binary masks')
-    parser.add_argument('-b', '--boundary_dir', help='directory containing mem \
-            boundary predictions')
-    parser.add_argument('-m', '--mem_threshold', type=float, help='threshold to use \
-            if providing raw mem predictons instead of just intensity')
+def execute_step(config):
+    raw_dir = Path(config['raw_dir'])
+    mask_dir = Path(config['nucleus_segmentation']['nuc_pred_dir'])
+    nuc_threshold = config['nucleus_segmentation']['nuc_pred_threshold']
+    sigma = config['nucleus_segmentation']['sigma']
+    min_distance = config['nucleus_segmentation']['min_distance']
 
-    # Parse and save as variables
-    args = parser.parse_args()
-    raw_dir = Path(args.raw_dir)
-    mask_dir = Path(args.mask_dir)
-    output_dir = Path(args.output_dir)
+    if config['nucleus_segmentation']['split_nuclei']:
+        boundary_dir = Path(config['nucleus_segmentation']['split_nuclei']['boundary_dir'])
+        mem_threshold = config['nucleus_segmentation']['split_nuclei']['mem_pred_threshold']
+        mode = config['nucleus_segmentation']['split_nuclei']['mode']
+
+    output_dir = Path(config['nucleus_segmentation']['output_dir'])
 
     # Check raw and mask directories exist
     for directory in [raw_dir, mask_dir]:
@@ -104,7 +94,7 @@ def main():
 
     @magicgui(call_button='Read boundary img', img_id={'choices': list_of_img_ids})
     def open_boundary_image(
-            boundary_dir: Path = args.boundary_dir,
+            boundary_dir: Path = boundary_dir,
             img_id=list_of_img_ids[0]
     ) -> Image:
         path = boundary_dir / f'{img_id}_struct_segmentation.tiff'
@@ -116,32 +106,48 @@ def main():
     @magicgui(call_button='Apply threshold')
     def apply_threshold(
             layer: ImageData,
-            threshold: float = args.nuc_threshold
+            threshold: float = nuc_threshold
     ) -> Image:
         if layer is not None:
             mask = layer > threshold
             return Image(mask)
 
+    if mode == 'automatic':
+        @magicgui(call_button='Split nuclei with membranes')
+        def split_nuclei_using_membranes(
+                nuc_mask: Image,
+                mem_pred: Image,
+                mem_threshold: float = mem_threshold,
+        ) -> Image:
+            # TODO: check if this if statement makes sense
+            if nuc_mask and mem_pred is not None:
+                mem_binary = mem_pred.data > mem_threshold
+                nuclei_split = np.where(mem_binary, 0, nuc_mask.data)
+                return Image(nuclei_split)
 
-    @magicgui(call_button='Split nuclei with membranes')
-    def split_nuclei_using_membranes(
-            nuc_mask: Image,
-            mem_pred: Image,
-            mem_threshold: float,
-    ) -> Image:
-        # TODO: check if this if statement makes sense
-        if nuc_mask and mem_pred is not None:
-            mem_binary = mem_pred.data > mem_threshold
-            nuclei_split = np.where(mem_binary, 0, nuc_mask.data)
-            return Image(nuclei_split)
+    elif mode == 'interactive':
+        @magicgui(call_button='Split nuclei interactively')
+        def split_nuclei_interactively(
+                raw_img: ImageData,
+                nuc_mask: ImageData,
+                mem_mask: ImageData,
+                shapes: Shapes
+        ) -> Image:
+            if shapes is not None:
+                rois = shapes.to_labels(raw_img.shape) > 0
+                mem_mask_selection = mem_mask*rois
+                nuclei_split_manual = np.where(mem_mask_selection, 0, nuc_mask)
+            return Image(nuclei_split_manual)
 
 
     @magicgui(call_button='Run DT watershed')
     def run_dt_watershed(
             image: ImageData,
-            sigma: int = args.sigma,
-            min_distance: int = args.min_distance
+            sigma: int = sigma,
+            min_distance: int = min_distance
     ) -> Labels:
+        if image.ndim == 4:
+            image = image[0, :, :, :]
         results = dt_watershed(image, sigma=sigma, min_distance=min_distance)
         return Labels(results)
 
@@ -170,13 +176,25 @@ def main():
     viewer.window.add_dock_widget(open_seg_image, area='right')
     viewer.window.add_dock_widget(open_boundary_image, area='right')
     viewer.window.add_dock_widget(apply_threshold, area='right')
-    viewer.window.add_dock_widget(split_nuclei_using_membranes, area='right')
+    viewer.window.add_dock_widget(split_nuclei_interactively, area='right')
     viewer.window.add_dock_widget(run_dt_watershed, area='right')
     viewer.window.add_dock_widget(save_layer, area='left')
 
     open_raw_image.img_id.changed.connect(update_img_id)
 
     napari.run()
+
+
+def main():
+    # Command line arguments
+    parser = argparse.ArgumentParser(
+            description='DT watershed segmentation of nucleus mask'
+    )
+    parser.add_argument('config', help='path to config file for segmentation')
+    args = parser.parse_args()
+
+    config = yaml.load(open(args.config), Loader=yaml.Loader)
+    execute_step(config)
 
 
 if __name__ == '__main__':
