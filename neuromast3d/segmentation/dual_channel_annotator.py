@@ -51,6 +51,8 @@ def execute_step(config):
             ]
     )
     logger.info(sys.argv)
+    logger.info('raw dir is %s', config['raw_dir'])
+    logger.info('config settings are %s', config['membrane_segmentation']
 
     # Gather list of img ids
     list_of_img_ids = [fn.stem for fn in raw_dir.glob('*.tiff')]

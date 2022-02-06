@@ -57,6 +57,8 @@ def execute_step(config):
             format='%(asctime)s %(message)s'
     )
     logger.info(sys.argv)
+    logger.info('raw dir is %s', config['raw_dir'])
+    logger.info('config settings are %s', config['nucleus_segmentation'])
 
     # Collect all image ids in raw directory
     list_of_img_ids = [fn.stem for fn in Path(raw_dir).glob('*.tiff')]
@@ -81,63 +83,72 @@ def execute_step(config):
         return Image(raw_img)
 
 
-    @magicgui(call_button='Read seg img', img_id={'choices': list_of_img_ids})
+    @magicgui(call_button='Read nucleus predictions', img_id={'choices': list_of_img_ids})
     def open_seg_image(
             seg_dir: Path = mask_dir,
             img_id=list_of_img_ids[0]
-    ) -> Image:
+    ) -> napari.types.LayerDataTuple:
         path = seg_dir / f'{img_id}_struct_segmentation.tiff'
         reader = AICSImage(path)
         seg_img = reader.get_image_data('ZYX', S=0, T=0, C=0)
-        return Image(seg_img)
+        return (seg_img, {'name': 'nuc_pred', 'blending': 'additive'}, 'image')
 
 
     @magicgui(call_button='Read boundary img', img_id={'choices': list_of_img_ids})
     def open_boundary_image(
             boundary_dir: Path = boundary_dir,
             img_id=list_of_img_ids[0]
-    ) -> Image:
+    ) -> napari.types.LayerDataTuple:
         path = boundary_dir / f'{img_id}_struct_segmentation.tiff'
         reader = AICSImage(path)
         boundary_img = reader.get_image_data('ZYX', S=0, T=0, C=0)
-        return Image(boundary_img)
+        return (boundary_img, {'name': 'mem_pred', 'blending': 'additive'}, 'image')
 
 
-    @magicgui(call_button='Apply threshold')
-    def apply_threshold(
+    @magicgui(call_button='Split nuclei automatically')
+    def split_nuclei_using_membranes(
+            nuc_mask: Image,
+            mem_mask: Image,
+            mem_threshold: float = mem_threshold,
+    ) -> Image:
+        # TODO: check if this if statement makes sense
+        if nuc_mask and mem_mask is not None:
+            nuclei_split = np.where(mem_mask.data, 0, nuc_mask.data)
+            return Image(nuclei_split)
+
+
+    @magicgui(call_button='Split nuclei interactively')
+    def split_nuclei_interactively(
+            raw_img: ImageData,
+            nuc_mask: ImageData,
+            mem_mask: ImageData,
+            shapes: Shapes
+    ) -> Image:
+        if shapes is not None:
+            rois = shapes.to_labels(raw_img.shape) > 0
+            mem_mask_selection = mem_mask*rois
+            nuclei_split = np.where(mem_mask_selection, 0, nuc_mask)
+        return Image(nuclei_split)
+
+
+    @magicgui(call_button='Apply nuc threshold')
+    def apply_nuc_threshold(
             layer: ImageData,
             threshold: float = nuc_threshold
-    ) -> Image:
+    ) -> napari.types.LayerDataTuple:
         if layer is not None:
             mask = layer > threshold
-            return Image(mask)
+            return (mask, {'name': 'nuc_mask', 'blending': 'additive'}, 'image')
 
-    if mode == 'automatic':
-        @magicgui(call_button='Split nuclei with membranes')
-        def split_nuclei_using_membranes(
-                nuc_mask: Image,
-                mem_pred: Image,
-                mem_threshold: float = mem_threshold,
-        ) -> Image:
-            # TODO: check if this if statement makes sense
-            if nuc_mask and mem_pred is not None:
-                mem_binary = mem_pred.data > mem_threshold
-                nuclei_split = np.where(mem_binary, 0, nuc_mask.data)
-                return Image(nuclei_split)
 
-    elif mode == 'interactive':
-        @magicgui(call_button='Split nuclei interactively')
-        def split_nuclei_interactively(
-                raw_img: ImageData,
-                nuc_mask: ImageData,
-                mem_mask: ImageData,
-                shapes: Shapes
-        ) -> Image:
-            if shapes is not None:
-                rois = shapes.to_labels(raw_img.shape) > 0
-                mem_mask_selection = mem_mask*rois
-                nuclei_split_manual = np.where(mem_mask_selection, 0, nuc_mask)
-            return Image(nuclei_split_manual)
+    @magicgui(call_button='Apply mem threshold')
+    def apply_mem_threshold(
+            layer: ImageData,
+            threshold: float = mem_threshold
+    ) -> napari.types.LayerDataTuple:
+        if layer is not None:
+            mask = layer > threshold
+            return (mask, {'name': 'mem_mask', 'blending': 'additive'}, 'image')
 
 
     @magicgui(call_button='Run DT watershed')
@@ -148,35 +159,36 @@ def execute_step(config):
     ) -> Labels:
         if image.ndim == 4:
             image = image[0, :, :, :]
-        results = dt_watershed(image, sigma=sigma, min_distance=min_distance)
-        return Labels(results)
+        ws_results = dt_watershed(image, sigma=sigma, min_distance=min_distance)
+        return Labels(ws_results)
 
 
     @magicgui(call_button='Save layer')
-    def save_layer(layer: Layer, img_id: str, filename: Path = output_dir):
+    def save_layer(layer: Layer, img_id: str, filename: Path = output_dir, overwrite: bool = False):
         if layer:
-            raw_save_path = Path(f'{output_dir}/raw_nuc_labels')
-            raw_save_path.mkdir(parents=True, exist_ok=True)
-            writer = ome_tiff_writer.OmeTiffWriter(
-                    raw_save_path/f'{img_id}_rawlabels.tiff',
-                    overwrite_file=True
-            )
+            path = output_dir / f'{img_id}_{layer.name}.tiff'
+            writer = ome_tiff_writer.OmeTiffWriter(path, overwrite_file=overwrite)
             writer.save(layer.data, dimension_order='ZYX')
-            logger.info('%s raw labels saved at %s', img_id, raw_save_path)
+            logger.info('%s %s saved at %s', img_id, layer.name, path)
 
 
     def update_img_id(event):
         open_seg_image.img_id.value = event.value
         save_layer.img_id.value = event.value
         open_boundary_image.img_id.value = event.value
+        save_layer.img_id.value = event.value
 
 
     viewer.window.add_dock_widget(clear_layers, area='left')
     viewer.window.add_dock_widget(open_raw_image, area='right')
     viewer.window.add_dock_widget(open_seg_image, area='right')
     viewer.window.add_dock_widget(open_boundary_image, area='right')
-    viewer.window.add_dock_widget(apply_threshold, area='right')
-    viewer.window.add_dock_widget(split_nuclei_interactively, area='right')
+    viewer.window.add_dock_widget(apply_nuc_threshold, area='right')
+    viewer.window.add_dock_widget(apply_mem_threshold, area='right')
+    if mode == 'automatic':
+        viewer.window.add_dock_widget(split_nuclei_using_membranes, area='right')
+    elif mode == 'interactive':
+        viewer.window.add_dock_widget(split_nuclei_interactively, area='right')
     viewer.window.add_dock_widget(run_dt_watershed, area='right')
     viewer.window.add_dock_widget(save_layer, area='left')
 
