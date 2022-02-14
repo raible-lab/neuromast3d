@@ -8,9 +8,9 @@ Note: This scripts assumes a membrane channel is available as well.
 
 import argparse
 import logging
-import os
 from pathlib import Path
 import sys
+from typing import List
 
 from aicsimageio import AICSImage
 from aicsimageio.writers import ome_tiff_writer
@@ -19,7 +19,6 @@ import napari
 from napari.layers import Image, Labels, Layer, Shapes
 from napari.types import ImageData
 import numpy as np
-from skimage import morphology, filters
 import yaml
 
 from neuromast3d.segmentation.utils import dt_watershed
@@ -117,18 +116,25 @@ def execute_step(config):
             return Image(nuclei_split)
 
 
+    @magicgui(call_button='Add 3d shapes layer')
+    def add_3d_shapes_layer():
+        if viewer:
+            viewer.add_shapes(ndim=3, name='splitting_rois')
+
+
     @magicgui(call_button='Split nuclei interactively')
     def split_nuclei_interactively(
-            raw_img: ImageData,
             nuc_mask: ImageData,
             mem_mask: ImageData,
             shapes: Shapes
-    ) -> Image:
+    ) -> List[napari.types.LayerDataTuple]:
         if shapes is not None:
-            rois = shapes.to_labels(raw_img.shape) > 0
+            rois = shapes.to_labels(nuc_mask.shape) > 0
             mem_mask_selection = mem_mask*rois
             nuclei_split = np.where(mem_mask_selection, 0, nuc_mask)
-        return Image(nuclei_split)
+            mem_mask_selection = mem_mask_selection.astype('uint8')*255
+        return [(nuclei_split, {'name': 'nuclei_split'}, 'image'),
+                (mem_mask_selection, {'name': 'mem_mask_selection'}, 'image')]
 
 
     @magicgui(call_button='Apply nuc threshold')
@@ -188,6 +194,7 @@ def execute_step(config):
     if mode == 'automatic':
         viewer.window.add_dock_widget(split_nuclei_using_membranes, area='right')
     elif mode == 'interactive':
+        viewer.window.add_dock_widget(add_3d_shapes_layer, area='right')
         viewer.window.add_dock_widget(split_nuclei_interactively, area='right')
     viewer.window.add_dock_widget(run_dt_watershed, area='right')
     viewer.window.add_dock_widget(save_layer, area='left')
