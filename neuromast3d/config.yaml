@@ -21,7 +21,7 @@ raw_dir: '/home/maddy/projects/sost_nlsEos_claudin_gfp_5dpf_DRAQ5_Airy/stack_ali
 
 nucleus_segmentation:
         # enable/disable nucleus segmentation step
-        state: True
+        state: False
         # path to directory with nucleus mask predictions
         nuc_pred_dir: '/home/maddy/projects/sost_nlsEos_claudin_gfp_5dpf_DRAQ5_Airy/nuc_model_2_results'
         nuc_pred_threshold: 0.6
@@ -39,12 +39,11 @@ nucleus_segmentation:
 
 membrane_segmentation:
         # enable/disable membrane segmentation step
-        state: False
+        state: True 
         # path to nuclear labels
-        nuc_labels_dir: 
+        nuc_labels_dir: '/home/maddy/projects/sost_nlsEos_claudin_gfp_5dpf_DRAQ5_Airy/nuc_labels'
         # path to directory with membrane boundary predictions
         mem_pred_dir: '/home/maddy/projects/sost_nlsEos_claudin_gfp_5dpf_DRAQ5_Airy/mem_model_3_results'
-        mem_pred_threshold: 0.4
         # desired output directory name (will be created if nonexistent)
         output_dir: '/home/maddy/projects/sost_nlsEos_claudin_gfp_5dpf_DRAQ5_Airy/cell_segmentations'
 

@@ -20,18 +20,17 @@ from aicsimageio.writers import ome_tiff_writer
 from magicgui import magicgui
 import napari
 from napari.layers import Image, Labels, Points, Layer
-from napari.types import LabelsData
+from napari.types import LabelsData, ImageData
 import numpy as np
 from scipy import ndimage as ndi
 from skimage import morphology, filters
-from skimage.feature import peak_local_max
 from skimage.measure import regionprops
 from skimage.segmentation import find_boundaries, watershed
 import yaml
 
 
 def execute_step(config):
-    raw_dir = Path(config['membrane_segmentation']['raw_dir'])
+    raw_dir = Path(config['raw_dir'])
     nuc_labels_dir = Path(config['membrane_segmentation']['nuc_labels_dir'])
     mem_pred_dir = Path(config['membrane_segmentation']['mem_pred_dir'])
     output_dir = Path(config['membrane_segmentation']['output_dir'])
@@ -52,7 +51,7 @@ def execute_step(config):
     )
     logger.info(sys.argv)
     logger.info('raw dir is %s', config['raw_dir'])
-    logger.info('config settings are %s', config['membrane_segmentation']
+    logger.info('config settings are %s', config['membrane_segmentation'])
 
     # Gather list of img ids
     list_of_img_ids = [fn.stem for fn in raw_dir.glob('*.tiff')]
@@ -164,7 +163,18 @@ def execute_step(config):
             )
 
 
-    @magicgui(call_button='Generate seeds')
+    @magicgui(call_button='Run seeded watershed from labeled markers')
+    def run_seeded_watershed_from_markers(
+            boundaries: ImageData,
+            markers: LabelsData,
+            connectivity: int = 2
+    ) -> napari.types.LayerDataTuple:
+        if viewer.layers['nuc_labels'] and viewer.layers['mem_predictions']:
+            ws_results = watershed(boundaries, markers, connectivity=connectivity)
+            return (ws_results, {'name': 'cell_labels'}, 'labels')
+
+
+    @magicgui(call_button='Generate point seeds')
     def generate_seeds_from_nuclei(nuc_labels_layer: LabelsData) -> Points:
         '''Generate one seed for every label, using the centroid of each label'''
         if viewer.layers['nuc_labels']:
@@ -175,8 +185,8 @@ def execute_step(config):
             return Points(seeds)
 
 
-    @magicgui(call_button='Run seeded watershed')
-    def run_seeded_watershed(
+    @magicgui(call_button='Run seeded watershed from points')
+    def run_seeded_watershed_from_points(
             boundaries: Image,
             seed_dilation_radius: int = 10,
             connectivity: int = 2
@@ -262,8 +272,9 @@ def execute_step(config):
 
     viewer.window.add_dock_widget(clear_layers, area='right')
     viewer.window.add_dock_widget(open_next_image, area='right')
+    viewer.window.add_dock_widget(run_seeded_watershed_from_markers, area='right')
     viewer.window.add_dock_widget(generate_seeds_from_nuclei, area='right')
-    viewer.window.add_dock_widget(run_seeded_watershed, area='right')
+    viewer.window.add_dock_widget(run_seeded_watershed_from_points, area='right')
     viewer.window.add_dock_widget(remove_small_objects_wrapper, area='right')
     viewer.window.add_dock_widget(create_watershed_lines, area='right')
     viewer.window.add_dock_widget(save_layer, area='left')
