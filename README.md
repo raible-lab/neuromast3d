@@ -73,9 +73,14 @@ visualization script requires a different environment and will not be able to
 work in this one.)
 4. Edit the provided `config.yaml` file to point to the images you want to 
 process and which steps you want to use.
-5. To run multiple steps as a workflow, set the `state` of those steps to "True" 
+5. Run the command `export PYTHONPATH="/path/to/neuromast3d"`. This environment 
+variable is necessary for Python to be able to "see" the modules and functions 
+associated with this project. It will not be necessary once I configure this 
+project to be an installable package.
+6. To run multiple steps as a workflow, set the `state` of those steps to "True" 
 within the config file, and then run the command `python neuromast3d/run_neuromast3d.py config.yml`. 
 (Note: you must be within the `neuromast3d` directory to run this as written.)
+You can optionally run single steps from the command line.
 
 Please report any issues you have either by contacting me or opening an 
 issue on Github. Of note, this code has currently only been tested on Ubuntu 
