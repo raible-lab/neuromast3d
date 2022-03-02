@@ -9,7 +9,8 @@ channels:
 
 
         seg_channels:
-                cell_seg: 0
+                nuc_seg: 0
+                cell_seg: 1
 
 
 # Directory in which to save results
@@ -39,7 +40,7 @@ nucleus_segmentation:
 
 membrane_segmentation:
         # enable/disable membrane segmentation step
-        state: True 
+        state: False
         # path to nuclear labels
         nuc_labels_dir: '/home/maddy/projects/sost_nlsEos_claudin_gfp_5dpf_DRAQ5_Airy/nuc_labels'
         # path to directory with membrane boundary predictions
@@ -49,23 +50,23 @@ membrane_segmentation:
 
 create_fov_dataset:
         # enable/disable fov dataset creation
-        state: False
+        state: True
         # directory with original .czi images to get pixel size
         original_dir: '/home/maddy/projects/sost_nlsEos_claudin_gfp_5dpf_DRAQ5_Airy/original'
         # directory with segmented/label images
-        seg_dir: '/home/maddy/projects/sost_nlsEos_claudin_gfp_5dpf_DRAQ5_Airy/cell_segmentations'
+        seg_dir: '/home/maddy/projects/sost_nlsEos_claudin_gfp_5dpf_DRAQ5_Airy/cell_segmentations/ver2'
         # set autorotation and, if so, the strategy to use
         autorotate: False
 
 prep_single_cells:
         # enable/disable single cell dataset creation from fov dataset
-        state: False
+        state: True
 
 alignment:
         # enable/disable alignment
-        state: False
-        # channel to use to calculate the rotation angle
-        rot_ch_index: 0
+        state: True
+        # channel in the seg img to use to calculate the rotation angle
+        rot_ch_index: 1
         # whether to make the rotation unique
         make_unique: True
         # alignment method to use (xy_only or xy_xz)
