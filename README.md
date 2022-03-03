@@ -64,7 +64,7 @@ knowledge of how to use git/GitHub.)
 
 ## Option 1: Using the conda env yaml file (for highly specific dependencies)
 1. Clone the `neuromast3d` repository to your local machine using the `git 
-clone` command.
+clone` command.  To clone this branch, use `git clone --branch`.
 2. Create an environment using the YAML file provided within the repository. 
 Open a terminal, navigate to the `neuromast3d` directory, and run the command 
 `conda env create --file neuromast3d_env1.yml`.
