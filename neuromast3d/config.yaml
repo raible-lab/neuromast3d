@@ -50,7 +50,7 @@ membrane_segmentation:
 
 create_fov_dataset:
         # enable/disable fov dataset creation
-        state: True
+        state: False
         # directory with original .czi images to get pixel size
         original_dir: '/home/maddy/projects/sost_nlsEos_claudin_gfp_5dpf_DRAQ5_Airy/original'
         # directory with segmented/label images
