@@ -176,7 +176,7 @@ def execute_step(config):
         for cell in current_fov_cells.itertuples(index=False):
 
             label = int(cell.label)
-            cell_img = np.where(seg_img == label, seg_img, 0)
+            cell_img = np.where(seg_img == label, 1, 0)
 
             # Calculate alignment angle in xy plane
             cell_img = cell_img.astype(np.uint8)
