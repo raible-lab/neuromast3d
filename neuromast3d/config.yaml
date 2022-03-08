@@ -60,7 +60,7 @@ create_fov_dataset:
 
 prep_single_cells:
         # enable/disable single cell dataset creation from fov dataset
-        state: True
+        state: False
 
 alignment:
         # enable/disable alignment

@@ -145,6 +145,7 @@ def execute_step(config):
     cell_angles = []
 
     for fov in fov_df.itertuples(index=False):
+        print('starting alignment for', fov.fov_id)
         seg_reader = AICSImage(fov.fov_seg_path)
 
         # TODO: For now, nm and cell centroid calculation will just use the
@@ -173,7 +174,10 @@ def execute_step(config):
         # Subset cell df for this fov
         current_fov_cells = cell_df[cell_df['fov_id'] == fov.fov_id]
 
+        print('fov preparation complete.')
+
         for cell in current_fov_cells.itertuples(index=False):
+            print('Aligning ', cell.label)
 
             label = int(cell.label)
             cell_img = np.where(seg_img == label, 1, 0)
@@ -237,6 +241,7 @@ def execute_step(config):
     angle_df = pd.DataFrame(cell_angles)
     cell_df = cell_df.merge(angle_df, on='CellId')
     cell_df.to_csv(f'{step_dir}/manifest.csv')
+    print('Manifest saved.')
 
 
 def main():
