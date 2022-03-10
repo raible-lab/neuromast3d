@@ -55,13 +55,14 @@ be used as input to cvapipe_analysis.
 Available alignement methods (TBD):
     - xy_xz
 
-# Current steps to reproduce (for the brave souls in the lab who wish to do so)
+# Current steps to reproduce 
 This will likely be updated in the future as I look into things like using
 setuptools for installation. For now, though...
 
 (Note: these instructions assume a working conda installation and some 
 knowledge of how to use git/GitHub.)
 
+## Option 1: Using the conda env yaml file (for highly specific dependencies)
 1. Clone the `neuromast3d` repository to your local machine using the `git 
 clone` command.
 2. Create an environment using the YAML file provided within the repository. 
@@ -81,6 +82,19 @@ project to be an installable package.
 within the config file, and then run the command `python neuromast3d/run_neuromast3d.py config.yml`. 
 (Note: you must be within the `neuromast3d` directory to run this as written.)
 You can optionally run single steps from the command line.
+
+## Option 2: Using pip install (more general option, but less tested)
+1. Clone the `neuromast3d` repository to your local machine using the `git 
+clone` command.
+2. Create a conda environment with python 3.8 installed by running the command 
+`conda env create -n neuromast3d_env python=3.8`.
+3. Activate the environment by running `conda activate neuromast3d_env`.
+4. Navigate to the `neuromast3d` root directory and run `pip install .` to 
+install dependencies. If you would like to have an editable install, run `pip 
+install -e .`. (I need instructions for installing extras, TBD). To run 
+napari, you will also need to run `pip install PyQt5`.
+5. Proceed with editing the `config.yaml` file as described above.
+6. Run the workflow by using the command `run_neuromast3d /path/to/config.yaml`
 
 Please report any issues you have either by contacting me or opening an 
 issue on Github. Of note, this code has currently only been tested on Ubuntu 
