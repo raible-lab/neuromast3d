@@ -131,6 +131,7 @@ def execute_step(config):
     raw_channel_ids, seg_channel_ids = get_channel_ids(config['channels'])
 
     # Create output directory if it doesn't exist
+    # TODO: change to step dir to be more consistent with other steps
     output_dir.mkdir(parents=True, exist_ok=True)
 
     # Save command line arguments into logfile
