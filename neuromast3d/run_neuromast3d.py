@@ -3,12 +3,22 @@
 
 import argparse
 from pathlib import Path
+from typing import List
 
 import yaml
 
 from neuromast3d.segmentation import dual_channel_annotator, nucleus_segmentation
 from neuromast3d.alignment import nm_alignment_basic
 from neuromast3d.prep_single_cells import create_fov_dataset, prep_single_cells
+
+
+POSSIBLE_STEPS = [
+        'nucleus_segmentation',
+        'membrane_segmentation',
+        'create_fov_dataset',
+        'prep_single_cells',
+        'alignment'
+]
 
 
 def parse_cli_args():
@@ -28,16 +38,20 @@ def save_config(config, output_dir):
         yaml.dump(config, output)
 
 
-def find_steps_to_run_from_config(config):
-    possible_steps = [
-            'nucleus_segmentation',
-            'membrane_segmentation',
-            'create_fov_dataset',
-            'prep_single_cells',
-            'alignment',
-    ]
-    steps_to_run = [step for step in possible_steps if config[f'{step}']['state']]
+def find_steps_to_run_from_config(config, steps=POSSIBLE_STEPS) -> List:
+    steps_to_run = [step for step in steps if config[f'{step}']['state']]
     return steps_to_run
+
+
+def validate_steps(steps_to_run: List, possible_steps=POSSIBLE_STEPS):
+    if steps_to_run == []:
+        raise ValueError('No valid steps indicated to be run, check config')
+    if len(steps_to_run) > 1:
+        step_indices = [possible_steps.index(step) for step in steps_to_run]
+        diffs = [y - x for y, x in zip(step_indices, step_indices[1:])]
+        if any(d < -1 for d in diffs):
+            # A step has been skipped
+            raise ValueError('Missing step(s), check config')
 
 
 def run_steps(steps_to_run, config):
