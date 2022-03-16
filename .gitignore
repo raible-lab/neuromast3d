@@ -1,6 +1,13 @@
 # Recovery files for vim
 *.swp
 
+# Tiffs in testing resources
+# (currently too large for github)
+tests/resources/
+
+# VSCode config
+.vscode/
+
 # Downloaded models (too big for github)
 aics_seg_model_zoo_models/
 
