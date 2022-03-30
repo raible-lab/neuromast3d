@@ -64,7 +64,7 @@ knowledge of how to use git/GitHub.)
 
 ## Option 1: Using the conda env yaml file (for highly specific dependencies)
 1. Clone the `neuromast3d` repository to your local machine using the `git 
-clone` command.
+clone` command.  To clone this branch, use `git clone --branch`.
 2. Create an environment using the YAML file provided within the repository. 
 Open a terminal, navigate to the `neuromast3d` directory, and run the command 
 `conda env create --file neuromast3d_env1.yml`.
@@ -79,8 +79,8 @@ variable is necessary for Python to be able to "see" the modules and functions
 associated with this project. It will not be necessary once I configure this 
 project to be an installable package.
 6. To run multiple steps as a workflow, set the `state` of those steps to "True" 
-within the config file, and then run the command `python neuromast3d/run_neuromast3d.py config.yml`. 
-(Note: you must be within the `neuromast3d` directory to run this as written.)
+within the config file, and then run the command `python -m neuromast3d.run_neuromast3d.py neuromast3d/config.yaml`. 
+(Note: you must be within the root `neuromast3d` directory to run this as written.)
 You can optionally run single steps from the command line.
 
 ## Option 2: Using pip install (more general option, but less tested)
