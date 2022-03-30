@@ -8,6 +8,7 @@ from ast import literal_eval
 from functools import partial
 from pathlib import Path
 import sys
+import warnings
 
 from aicsimageio.writers import ome_tiff_writer
 from aicsimageprocessing import resize, resize_to
@@ -20,12 +21,13 @@ from neuromast3d.prep_single_cells.create_fov_dataset import get_channel_ids
 from neuromast3d.step_utils import step_logger, read_raw_and_seg_img, create_step_dir, save_raw_and_seg_cell
 
 
-def inherit_labels(dna_mask_bw, mem_seg):
-    dna_mask_label = np.zeros_like(mem_seg)
-    dna_mask_label[dna_mask_bw > 0] = 1
-    dna_mask_label = dna_mask_label * mem_seg
-    nuc_seg = dna_mask_label
-    return nuc_seg
+def inherit_labels(child_mask: int, parent_label: int):
+    child_relabeled = np.zeros_like(parent_label)
+    child_relabeled[child_mask > 0] = 1
+    child_relabeled = child_relabeled * parent_label
+    if np.any(child_mask[parent_label > 0] > 0):
+        warnings.warn("Some child pixels are outside the parent", stacklevel=2)
+    return child_relabeled
 
 
 def remove_small_labels(label_img, size_threshold):
@@ -58,7 +60,11 @@ def remove_small_labels_2ch(mem_seg_whole, nuc_seg_whole):
 
 
 def create_cropping_roi(mem_seg):
-    assert mem_seg.ndim == 3
+    if mem_seg.ndim != 3:
+        raise NotImplementedError(
+            'Cropping function is for 3D images only'
+            f'You passed an image with ndim={mem_seg.ndim}'
+        )
     z_range = np.where(np.any(mem_seg, axis=(1, 2)))
     y_range = np.where(np.any(mem_seg, axis=(0, 2)))
     x_range = np.where(np.any(mem_seg, axis=(0, 1)))
@@ -88,7 +94,11 @@ def discard_labels_outside_mask(labels, mask_labels):
 
 
 def apply_function_to_all_channels(image, function):
-    # Expects 4 channel image in CZYX dim order
+    if image.ndim != 4:
+        raise ValueError(
+            'Function expects image with ndim=4'
+            f'You passed an image with ndim {image.ndim}'
+        )
     img_processed = []
     for channel in image:
         ch_processed = function(channel)
@@ -136,7 +146,7 @@ def preprocess_fov(row):
         discard_labels_outside_cell = partial(discard_labels_outside_mask, mask_labels=mem_seg)
         seg_non_mem = apply_function_to_all_channels(seg_non_mem, discard_labels_outside_cell)
 
-        inherit_labels_from_cell = partial(inherit_labels, mem_seg=mem_seg)
+        inherit_labels_from_cell = partial(inherit_labels, parent_label=mem_seg)
         seg_non_mem = apply_function_to_all_channels(seg_non_mem, inherit_labels_from_cell)
 
         seg_non_mem = apply_function_to_all_channels(seg_non_mem, resize_to_mem_raw)
