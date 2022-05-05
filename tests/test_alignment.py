@@ -10,10 +10,27 @@ from skimage.draw import ellipsoid
 from skimage.transform import rotate
 
 from neuromast3d.alignment.utils import find_major_axis_by_pca, rotate_image_2d_custom
-from neuromast3d.alignment.nm_alignment_basic import calculate_alignment_angle_2d
+from neuromast3d.alignment.nm_alignment_basic import align_cell_xz_long_axis_to_z_axis, calculate_alignment_angle_2d
+from neuromast3d.prep_single_cells.prep_single_cells import create_cropping_roi, crop_to_roi
 
 
-def test_find_major_axis_by_pca():
+@pytest.fixture
+def orig_ellipsoid():
+    return ellipsoid(51, 101, 201)
+
+
+@pytest.fixture
+def rotated_ellipsoid(orig_ellipsoid):
+    # assume ZYX order
+    # rotate around x, y, and z axes
+    ellip = orig_ellipsoid
+    ellip_rot1 = ndi.rotate(ellip, 30, (0, 1), order=0)
+    ellip_rot2 = ndi.rotate(ellip_rot1, 45, (0, 2), order=0)
+    ellip_rot3 = ndi.rotate(ellip_rot2, 60, (1, 2), order=0)
+    return ellip_rot1, ellip_rot2, ellip_rot3
+
+
+def test_find_major_axis_by_pca(orig_ellipsoid):
     """ Test that finding major axis by PCA works on an ellipsoid
 
     Note that the function assumes input array dims are ordered as ZYX,
@@ -23,7 +40,7 @@ def test_find_major_axis_by_pca():
     the columns of the resulting eigenvector matrix represent x, y, z.
     """
 
-    ellip = ellipsoid(50, 100, 200)
+    ellip = orig_ellipsoid
     eigenvecs = find_major_axis_by_pca(ellip, threed=True)
     eigenvecs = np.absolute(eigenvecs)
     expected = np.array([
@@ -100,3 +117,21 @@ def test_rotate_image_2d_custom_flipped_sign(a, b):
             flip_angle_sign=b[1],
     )
     np.testing.assert_almost_equal(x_rot_a, x_rot_b)
+
+
+def test_align_cell_xz_long_axis_to_z_axis_spheres(concentric_spheres):
+    # rotating spheres should not change anything
+    aligned, _ = align_cell_xz_long_axis_to_z_axis(concentric_spheres, concentric_spheres)
+    np.testing.assert_allclose(aligned, concentric_spheres)
+
+
+def test_align_cell_xz_long_axis_to_z_axis_rot_ellip(rotated_ellipsoid):
+    ellip_rot1, ellip_rot2, _ = rotated_ellipsoid
+    # To account differences in the image shape post rotation,
+    # we rotate twice for 45 degrees rather than once for 90
+    expected_pre = ndi.rotate(ellip_rot1, 45, (0, 2), order=0)
+    expected = ndi.rotate(expected_pre, 45, (0, 2), order=0)[np.newaxis, :, :, :]
+    ellip_rot1 = ellip_rot1[np.newaxis, :, :, :]
+    ellip_rot2 = ellip_rot2[np.newaxis, :, :, :]
+    aligned, _ = align_cell_xz_long_axis_to_z_axis(ellip_rot2, ellip_rot2)
+    np.testing.assert_allclose(aligned, expected)

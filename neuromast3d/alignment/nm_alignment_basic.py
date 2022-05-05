@@ -89,7 +89,7 @@ def calculate_alignment_angle_2d(
     return angle, centroid
 
 
-def align_cell_xy_long_axis_to_z_axis(raw_cell, seg_cell):
+def align_cell_xz_long_axis_to_z_axis(raw_cell, seg_cell):
     assert raw_cell.ndim == 4 and seg_cell.ndim == 4
     _, z, y, x = np.nonzero(seg_cell)
     xz = np.hstack([x.reshape(-1, 1), z.reshape(-1, 1)])
@@ -216,7 +216,7 @@ def execute_step(config):
             if mode == 'xy_xz':
                 # Do an additional rotation to align xy long axis to z axis
                 # TODO: save this angle too?
-                raw_cell_aligned, seg_cell_aligned = align_cell_xy_long_axis_to_z_axis(raw_cell_aligned, seg_cell_aligned)
+                raw_cell_aligned, seg_cell_aligned = align_cell_xz_long_axis_to_z_axis(raw_cell_aligned, seg_cell_aligned)
 
             # Save aligned single cell mask and raw image
             current_cell_dir = f'{step_dir}/{fov.fov_id}/{label}'
