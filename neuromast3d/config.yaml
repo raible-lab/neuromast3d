@@ -4,8 +4,7 @@
 channels:
         raw_channels:
                 nucleus: 0
-                sost_nuc: 1
-                membrane: 2
+                membrane: 1
 
 
         seg_channels:
@@ -15,16 +14,16 @@ channels:
 
 # Directory in which to save results
 # Individual steps will create their own subdirs to save within this
-project_dir: '/home/maddy/projects/sost_nlsEos_claudin_gfp_5dpf_DRAQ5_Airy/cvapipe_run_test'
+project_dir: '/home/maddy/projects/claudin_gfp_5dpf_DRAQ5_1h_airy_live_2/cvapipe_run_new_alignment'
 
 # Directory containing raw images
-raw_dir: '/home/maddy/projects/sost_nlsEos_claudin_gfp_5dpf_DRAQ5_Airy/stack_aligned'
+raw_dir: '/home/maddy/projects/claudin_gfp_5dpf_DRAQ5_1h_airy_live_2/stack_aligned'
 
 nucleus_segmentation:
         # enable/disable nucleus segmentation step
         state: False
         # path to directory with nucleus mask predictions
-        nuc_pred_dir: '/home/maddy/projects/sost_nlsEos_claudin_gfp_5dpf_DRAQ5_Airy/nuc_model_2_results'
+        nuc_pred_dir: ''
         nuc_pred_threshold: 0.6
         # parameters for distance transform watershed
         sigma: 6
@@ -32,29 +31,29 @@ nucleus_segmentation:
         # whether to use boundary predictions for nucleus splitting
         split_nuclei:
                 state: True
-                boundary_dir: '/home/maddy/projects/sost_nlsEos_claudin_gfp_5dpf_DRAQ5_Airy/mem_model_3_results'
+                boundary_dir: ''
                 mem_pred_threshold: 0.4
                 # set mode to automatic or interactive
-                mode: 'interactive'
-        output_dir: '/home/maddy/projects/sost_nlsEos_claudin_gfp_5dpf_DRAQ5_Airy/nuc_labels'
+                mode: 'automatic'
+        output_dir: ''
 
 membrane_segmentation:
         # enable/disable membrane segmentation step
         state: False
         # path to nuclear labels
-        nuc_labels_dir: '/home/maddy/projects/sost_nlsEos_claudin_gfp_5dpf_DRAQ5_Airy/nuc_labels'
+        nuc_labels_dir: ''
         # path to directory with membrane boundary predictions
-        mem_pred_dir: '/home/maddy/projects/sost_nlsEos_claudin_gfp_5dpf_DRAQ5_Airy/mem_model_3_results'
+        mem_pred_dir: ''
         # desired output directory name (will be created if nonexistent)
-        output_dir: '/home/maddy/projects/sost_nlsEos_claudin_gfp_5dpf_DRAQ5_Airy/cell_segmentations'
+        output_dir: ''
 
 create_fov_dataset:
         # enable/disable fov dataset creation
         state: False
         # directory with original .czi images to get pixel size
-        original_dir: '/home/maddy/projects/sost_nlsEos_claudin_gfp_5dpf_DRAQ5_Airy/original'
+        original_dir: '/home/maddy/projects/claudin_gfp_5dpf_DRAQ5_1h_airy_live_2/original'
         # directory with segmented/label images
-        seg_dir: '/home/maddy/projects/sost_nlsEos_claudin_gfp_5dpf_DRAQ5_Airy/cell_segmentations/ver2'
+        seg_dir: '/home/maddy/projects/claudin_gfp_5dpf_DRAQ5_1h_airy_live_2/mem_seg_quick_ver1'
         # set autorotation and, if so, the strategy to use
         autorotate: False
 
@@ -67,7 +66,7 @@ alignment:
         state: True
         # channel in the seg img to use to calculate the rotation angle
         rot_ch_index: 1
-        # whether to make the rotation unique
+        # whether to make the xy rotation unique
         make_unique: True
-        # alignment method to use (xy_only or xy_xz)
-        mode: xy_xz
+        # alignment method to use (xy_only, xy_xz, or xy_xz_yz)
+        mode: xy_xz_yz

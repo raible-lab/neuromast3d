@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-''' 
+'''
 Short script for taking Airyscan processed images (.czi files)
 Keeping only the channels up to max_channel and saving as .tiff
 '''
@@ -28,6 +28,8 @@ def main():
     extension = args.extension
     max_channel = args.max_channel
 
+    assert source_dir.exists()
+
     # Make output directory if not already existing
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -42,6 +44,7 @@ def main():
         output_path = output_dir / f'{fn.stem}.tiff'
         writer = ome_tiff_writer.OmeTiffWriter(output_path)
         writer.save(image_subset, dimension_order='CZYX')
+
 
 if __name__ == '__main__':
     main()
