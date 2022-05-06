@@ -89,10 +89,7 @@ def calculate_alignment_angle_2d(
     return angle, centroid
 
 
-# I'm actually not sure this function is named correctly...
-# should it not be aligning the xz long axis to the z axis?
-# Argh, it's so hard to keep track...
-def align_cell_xy_long_axis_to_z_axis(raw_cell, seg_cell):
+def align_cell_xz_long_axis_to_z_axis(raw_cell, seg_cell):
     assert raw_cell.ndim == 4 and seg_cell.ndim == 4
     _, z, y, x = np.nonzero(seg_cell)
     xz = np.hstack([x.reshape(-1, 1), z.reshape(-1, 1)])
@@ -246,7 +243,7 @@ def execute_step(config):
                 # Save aligned single cell mask and raw image
                 # Warning: this hasn't been tested thoroughly yet!
                 if mode == 'xy_xz_yz':
-                    raw_cell_aligned, seg_cell_aligned = align_cell_xy_long_axis_to_z_axis(raw_cell_aligned, seg_cell_aligned)
+                    raw_cell_aligned, seg_cell_aligned = align_cell_xz_long_axis_to_z_axis(raw_cell_aligned, seg_cell_aligned)
                     raw_cell_aligned, seg_cell_aligned = align_cell_yz_long_axis_to_z_axis(raw_cell_aligned, seg_cell_aligned)
             
             except MemoryError as e:

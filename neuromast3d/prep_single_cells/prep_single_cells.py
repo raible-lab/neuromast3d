@@ -62,7 +62,7 @@ def remove_small_labels_2ch(mem_seg_whole, nuc_seg_whole):
 def create_cropping_roi(mem_seg):
     if mem_seg.ndim != 3:
         raise NotImplementedError(
-            'Cropping function is for 3D images only'
+            'Cropping function is for 3D images only. '
             f'You passed an image with ndim={mem_seg.ndim}'
         )
     z_range = np.where(np.any(mem_seg, axis=(1, 2)))
