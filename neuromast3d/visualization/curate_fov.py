@@ -63,6 +63,7 @@ def main():
 
     curated_fov_info = []
     for fov in fov_df.itertuples(index=False):
+        print(f'Now viewing {fov.NM_ID}')
         raw_img, seg_img = read_raw_and_seg_img(
             fov.SourceReadPath,
             fov.SegmentationReadPath
@@ -73,14 +74,16 @@ def main():
         viewer.add_labels(seg_img)
 
         curator = FovCurator(fov.NM_ID)
-        polarity_indicator = magicgui(curator.indicate_polarity, axis={'choices': ['AP', 'DV']})
+        polarity_indicator = magicgui(
+                curator.indicate_polarity, 
+                axis={'choices': ['AP', 'DV']},
+        )
         label_picker = magicgui(curator.pick_labels, result_widget=True)
         viewer.window.add_dock_widget(polarity_indicator, area='right')
         viewer.window.add_dock_widget(label_picker, area='right')
 
         napari.run()
 
-        print(curator.info_to_dict())
         curated_fov_info.append(curator.info_to_dict())
 
     # Will just save in project dir for now
