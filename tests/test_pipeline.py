@@ -11,29 +11,6 @@ from neuromast3d.prep_single_cells import create_fov_dataset
 from neuromast3d.prep_single_cells import prep_single_cells
 
 
-@pytest.fixture
-def input_dir():
-    return Path('./tests/resources/test_files').resolve()
-
-
-@pytest.fixture(scope='class')
-def output_dir(tmp_path_factory):
-    return tmp_path_factory.mktemp('output')
-
-
-@pytest.fixture
-def config_path():
-    return Path('./tests/resources/config.yaml').resolve()
-
-
-@pytest.fixture
-def base_config(config_path, input_dir, output_dir):
-    config = yaml.load(open(config_path), Loader=yaml.Loader)
-    config['project_dir'] = output_dir
-    config['raw_dir'] = input_dir / 'stack_aligned'
-    return config
-
-
 @pytest.mark.slow
 class TestPipeline:
 
