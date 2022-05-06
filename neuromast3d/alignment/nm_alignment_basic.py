@@ -89,6 +89,9 @@ def calculate_alignment_angle_2d(
     return angle, centroid
 
 
+# I'm actually not sure this function is named correctly...
+# should it not be aligning the xz long axis to the z axis?
+# Argh, it's so hard to keep track...
 def align_cell_xy_long_axis_to_z_axis(raw_cell, seg_cell):
     assert raw_cell.ndim == 4 and seg_cell.ndim == 4
     _, z, y, x = np.nonzero(seg_cell)
@@ -102,6 +105,19 @@ def align_cell_xy_long_axis_to_z_axis(raw_cell, seg_cell):
     return raw_cell_aligned, seg_cell_aligned
 
 
+def align_cell_yz_long_axis_to_z_axis(raw_cell, seg_cell):
+    assert raw_cell.ndim == 4 and seg_cell.ndim == 4
+    _, z, y, x = np.nonzero(seg_cell)
+    yz = np.hstack([y.reshape(-1, 1), z.reshape(-1, 1)])
+    pca = PCA(n_components=2)
+    pca = pca.fit(yz)
+    eigenvecs = pca.components_
+    angle = 180 * np.arctan(eigenvecs[0][0]/eigenvecs[0][1]) / np.pi
+    seg_cell_aligned = ndi.rotate(seg_cell, -angle, axes=(1, 2), order=0)
+    raw_cell_aligned = ndi.rotate(raw_cell, -angle, axes=(1, 2), order=0)
+    return raw_cell_aligned, seg_cell_aligned
+
+
 def create_fov_dataframe_from_cell_dataframe(cell_df):
     fov_df = cell_df.copy()
     fov_df.drop_duplicates(subset=['fov_id'], keep='first', inplace=True)
@@ -111,6 +127,24 @@ def create_fov_dataframe_from_cell_dataframe(cell_df):
         inplace=True
     )
     return fov_df
+
+
+def interpolate_fov_in_z(seg_img, pixel_size_xyz):
+    nm = seg_img > 0
+    xy_res, _, z_res = pixel_size_xyz
+    nm = resize(
+            seg_img,
+            (
+                z_res / xy_res,
+                xy_res / xy_res,
+                xy_res / xy_res
+            ),
+            method='bilinear'
+    )
+    seg_img = resize_to(seg_img, nm.shape, method='nearest')
+    nm = binary_closing(nm, ball(5))
+    nm_centroid = ndi.center_of_mass(nm)
+    return seg_img, nm_centroid
 
 
 def execute_step(config):
@@ -152,21 +186,9 @@ def execute_step(config):
         # membrane channel. But it could be useful to have an option
         # to rotate about the centroid calculated from the nucleus channel.
         seg_img = seg_reader.get_image_data('ZYX', S=0, T=0, C=rot_ch_index)
-        nm = seg_img > 0
         pixel_size_xyz = ast.literal_eval(fov.pixel_size_xyz)
-        xy_res, _, z_res = pixel_size_xyz
-        nm = resize(
-                seg_img,
-                (
-                    z_res / xy_res,
-                    xy_res / xy_res,
-                    xy_res / xy_res
-                ),
-                method='bilinear'
-        )
-        seg_img = resize_to(seg_img, nm.shape, method='nearest')
-        nm = binary_closing(nm, ball(5))
-        nm_centroid = ndi.center_of_mass(nm)
+
+        seg_img, nm_centroid = interpolate_fov_in_z(seg_img, pixel_size_xyz)
 
         # Save nm centroids matched to fov_id
         nm_centroids.append({'fov_id': fov.fov_id, 'nm_centroid': nm_centroid})
@@ -177,9 +199,11 @@ def execute_step(config):
         print('fov preparation complete.')
 
         for cell in current_fov_cells.itertuples(index=False):
-            print('Aligning ', cell.label)
 
             label = int(cell.label)
+
+            print('Aligning ', cell.label)
+
             cell_img = np.where(seg_img == label, 1, 0)
 
             # Calculate alignment angle in xy plane
@@ -195,53 +219,67 @@ def execute_step(config):
             raw_cell, seg_cell = read_raw_and_seg_img(cell.crop_raw_pre_alignment, cell.crop_seg_pre_alignment)
 
             # Rotate function expects multichannel image
-            if seg_cell.ndim == 3:
-                seg_cell = np.expand_dims(seg_cell, axis=0)
-            seg_cell_aligned = rotate_image_2d_custom(
-                    image=seg_cell,
-                    angle=rotation_angle,
-                    interpolation_order=0,
-                    flip_angle_sign=True
-            )
+            try:
+                if seg_cell.ndim == 3:
+                    seg_cell = np.expand_dims(seg_cell, axis=0)
+                seg_cell_aligned = rotate_image_2d_custom(
+                        image=seg_cell,
+                        angle=rotation_angle,
+                        interpolation_order=0,
+                        flip_angle_sign=True
+                )
 
-            if raw_cell.ndim == 3:
-                raw_cell = np.expand_dims(raw_cell, axis=0)
-            raw_cell_aligned = rotate_image_2d_custom(
-                    image=raw_cell,
-                    angle=rotation_angle,
-                    interpolation_order=0,
-                    flip_angle_sign=True
-            )
+                if raw_cell.ndim == 3:
+                    raw_cell = np.expand_dims(raw_cell, axis=0)
+                raw_cell_aligned = rotate_image_2d_custom(
+                        image=raw_cell,
+                        angle=rotation_angle,
+                        interpolation_order=0,
+                        flip_angle_sign=True
+                )
 
-            if mode == 'xy_xz':
-                # Do an additional rotation to align xy long axis to z axis
-                # TODO: save this angle too?
-                raw_cell_aligned, seg_cell_aligned = align_cell_xy_long_axis_to_z_axis(raw_cell_aligned, seg_cell_aligned)
+                if mode == 'xy_xz':
+                    # Do an additional rotation to align xy long axis to z axis
+                    # TODO: save this angle too?
+                    raw_cell_aligned, seg_cell_aligned = align_cell_xy_long_axis_to_z_axis(raw_cell_aligned, seg_cell_aligned)
 
-            # Save aligned single cell mask and raw image
-            current_cell_dir = f'{step_dir}/{fov.fov_id}/{label}'
-            raw_path, seg_path = save_raw_and_seg_cell(raw_cell_aligned, seg_cell_aligned, current_cell_dir)
+                # Save aligned single cell mask and raw image
+                # Warning: this hasn't been tested thoroughly yet!
+                if mode == 'xy_xz_yz':
+                    raw_cell_aligned, seg_cell_aligned = align_cell_xy_long_axis_to_z_axis(raw_cell_aligned, seg_cell_aligned)
+                    raw_cell_aligned, seg_cell_aligned = align_cell_yz_long_axis_to_z_axis(raw_cell_aligned, seg_cell_aligned)
+            
+            except MemoryError as e:
+                print(e)
+                logger.info('For cell %s of %s, encountered error: %s',
+                            label, fov.fov_id, e)
+                continue
 
-            # Save angle matched to cell_id
-            # Also saves cell centroid and paths for rotated single cells
-            cell_angles.append({
-                'CellId': cell.CellId,
-                'rotation_angle': rotation_angle,
-                'nm_centroid': nm_centroid,
-                'centroid': cell_centroid,
-                'crop_raw': raw_path,
-                'crop_seg': seg_path
-            })
+            else:
+                current_cell_dir = f'{step_dir}/{fov.fov_id}/{label}'
+                raw_path, seg_path = save_raw_and_seg_cell(raw_cell_aligned, seg_cell_aligned, current_cell_dir)
 
-    # Add to cell_df
-    fov_centroid_df = pd.DataFrame(nm_centroids)
-    cell_df = cell_df.merge(fov_centroid_df, on='fov_id')
+                # Save angle matched to cell_id
+                # Also saves cell centroid and paths for rotated single cells
+                cell_angles.append({
+                    'CellId': cell.CellId,
+                    'rotation_angle': rotation_angle,
+                    'nm_centroid': nm_centroid,
+                    'centroid': cell_centroid,
+                    'crop_raw': raw_path,
+                    'crop_seg': seg_path
+                })
 
-    # Save angles to cell manifest
-    angle_df = pd.DataFrame(cell_angles)
-    cell_df = cell_df.merge(angle_df, on='CellId')
-    cell_df.to_csv(f'{step_dir}/manifest.csv')
-    print('Manifest saved.')
+
+        # Add to cell_df
+        fov_centroid_df = pd.DataFrame(nm_centroids)
+        new_cell_df = cell_df.merge(fov_centroid_df, on='fov_id')
+
+        # Save angles to cell manifest
+        angle_df = pd.DataFrame(cell_angles)
+        new_cell_df = new_cell_df.merge(angle_df, on='CellId')
+        new_cell_df.to_csv(f'{step_dir}/manifest.csv')
+        print('Manifest saved.')
 
 
 def main():
