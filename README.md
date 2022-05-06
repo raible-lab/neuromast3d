@@ -54,6 +54,7 @@ be used as input to cvapipe_analysis.
 
 Available alignement methods (TBD):
     - xy_xz
+    - xy_xz_yz
 
 # Current steps to reproduce 
 This will likely be updated in the future as I look into things like using
@@ -106,3 +107,11 @@ I welcome suggestions and contributions to this project. If you would like to
 contribute, I ask that you please do not push to the main branch. Instead, 
 create your own branch and open a pull request so that I may review the changes
 first. 
+
+## Testing (WIP)
+Unit tests are found in the `tests` directory. If you would like to run unit 
+tests on your installation, first install the test dependencies by running 
+`pip install -e .[test]`. Some tests require testing data - as I do not 
+currently have a way of distributing these, you may run the remainder of the 
+tests using `pytest -m "not uses_data"`. I am also exploring the use of `tox` 
+to run tests - stay tuned for more info on that.

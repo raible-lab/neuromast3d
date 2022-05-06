@@ -11,7 +11,7 @@ from neuromast3d.prep_single_cells import create_fov_dataset
 from neuromast3d.prep_single_cells import prep_single_cells
 
 
-@pytest.mark.slow
+@pytest.mark.uses_data
 class TestPipeline:
 
     @pytest.fixture
