@@ -16,13 +16,3 @@ def test_create_name_dict(create_fov_dataset_config):
         'crop_raw': ['nucleus', 'membrane'],
         'crop_seg': ['nuc_seg', 'cell_seg']
     }
-
-
-def test_execute_step(create_fov_dataset_config, output_dir):
-    execute_step(create_fov_dataset_config)
-    # Check expected output files created
-    pred_output_dir = output_dir
-    assert pred_output_dir.is_dir()
-
-    pred_output_csv = pred_output_dir / 'fov_dataset.csv'
-    assert pred_output_csv.exists()
