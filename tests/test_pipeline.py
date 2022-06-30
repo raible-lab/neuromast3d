@@ -56,6 +56,7 @@ class TestPipeline:
         config['alignment']['rot_ch_index'] = 1
         config['alignment']['make_unique'] = True
         config['alignment']['mode'] = f'{request.param}'
+        config['alignment']['continue_from_previous'] = False
         return config
 
 

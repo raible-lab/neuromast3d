@@ -263,7 +263,7 @@ def execute_step(config):
                 if mode == 'xy_xz':
                     # Do an additional rotation to align xy long axis to z axis
                     # TODO: save this angle too?
-                    raw_cell_aligned, seg_cell_aligned = align_cell_xy_long_axis_to_z_axis(raw_cell_aligned, seg_cell_aligned)
+                    raw_cell_aligned, seg_cell_aligned = align_cell_xz_long_axis_to_z_axis(raw_cell_aligned, seg_cell_aligned)
 
                 # Save aligned single cell mask and raw image
                 # Warning: this hasn't been tested thoroughly yet!
