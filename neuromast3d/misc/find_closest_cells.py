@@ -34,7 +34,7 @@ class RepresentativeCellFinder(KDTree):
             inds.append(ind)
         return dists, inds
 
-    def find_cells_near_cluster_centroid(self, cluster_labels: np.ndarray, cluster, k: int):
+    def find_cells_near_cluster_centroid(self, cluster_labels: np.ndarray, cluster: int, k: int):
         cluster_labels = cluster_labels[:, np.newaxis]
         clustered_data = np.concatenate((self.data, cluster_labels), axis=1)
         subset = clustered_data[clustered_data[:, -1] == cluster]
