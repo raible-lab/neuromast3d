@@ -190,7 +190,6 @@ def execute_step(config):
     fov_df = create_fov_dataframe_from_cell_dataframe(cell_df)
 
     # Calculate neuromast centroid and rotation angles
-    nm_centroids = []
     cell_angles = []
 
     for fov in fov_df.itertuples(index=False):
@@ -210,15 +209,17 @@ def execute_step(config):
 
         seg_img, nm_centroid = interpolate_fov_in_z(seg_img, pixel_size_xyz)
 
-        # Save nm centroids matched to fov_id
-        nm_centroids.append({'fov_id': fov.fov_id, 'nm_centroid': nm_centroid})
-
         # Subset cell df for this fov
         current_fov_cells = cell_df[cell_df['fov_id'] == fov.fov_id]
 
         print('fov preparation complete.')
 
         for cell in current_fov_cells.itertuples(index=False):
+
+            # Initialize a dict in which to store cell info
+            cell_info = {}
+            cell_info['nm_centroid'] = nm_centroid
+            cell_info['fov_id'] = cell.fov_id
 
             label = int(cell.label)
 
@@ -234,6 +235,8 @@ def execute_step(config):
                     origin=nm_centroid,
                     make_unique=settings['make_unique']
             )
+            cell_info['rotation_angle'] = rotation_angle
+            cell_info['centroid'] = cell_centroid
 
             # Apply xy alignment to seg and raw crops
             raw_cell, seg_cell = read_raw_and_seg_img(cell.crop_raw_pre_alignment, cell.crop_seg_pre_alignment)
@@ -266,7 +269,6 @@ def execute_step(config):
                     raw_cell_aligned, seg_cell_aligned = align_cell_xz_long_axis_to_z_axis(raw_cell_aligned, seg_cell_aligned)
 
                 # Save aligned single cell mask and raw image
-                # Warning: this hasn't been tested thoroughly yet!
                 if mode == 'xy_xz_yz':
                     raw_cell_aligned, seg_cell_aligned = align_cell_xz_long_axis_to_z_axis(raw_cell_aligned, seg_cell_aligned)
                     raw_cell_aligned, seg_cell_aligned = align_cell_yz_long_axis_to_z_axis(raw_cell_aligned, seg_cell_aligned)
@@ -281,24 +283,16 @@ def execute_step(config):
                 current_cell_dir = f'{step_dir}/{fov.fov_id}/{label}'
                 raw_path, seg_path = save_raw_and_seg_cell(raw_cell_aligned, seg_cell_aligned, current_cell_dir)
 
+                cell_info['crop_raw'] = raw_path
+                cell_info['crop_seg'] = seg_path
+
                 # Save angle matched to cell_id
                 # Also saves cell centroid and paths for rotated single cells
-                cell_angles.append({
-                    'CellId': cell.CellId,
-                    'rotation_angle': rotation_angle,
-                    'nm_centroid': nm_centroid,
-                    'centroid': cell_centroid,
-                    'crop_raw': raw_path,
-                    'crop_seg': seg_path
-                })
-
-        # Add to cell_df
-        fov_centroid_df = pd.DataFrame(nm_centroids)
-        new_cell_df = cell_df.merge(fov_centroid_df, on='fov_id')
+                cell_angles.append(cell_info)
 
         # Save angles to cell manifest
         angle_df = pd.DataFrame(cell_angles)
-        new_cell_df = new_cell_df.merge(angle_df, on='CellId')
+        new_cell_df = cell_df.merge(angle_df, on='CellId')
         new_cell_df.to_csv(f'{step_dir}/manifest.csv')
         print('Manifest saved.')
 
