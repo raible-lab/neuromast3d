@@ -144,17 +144,26 @@ def interpolate_fov_in_z(seg_img, pixel_size_xyz):
     return seg_img, nm_centroid
 
 
+def get_alignment_settings(config) -> dict:
+    project_dir = pathlib.Path(config['project_dir'])
+    settings = {
+            'project_dir': project_dir,
+            'path_to_manifest': project_dir / 'prep_single_cells/cell_manifest.csv',
+            'rot_ch_index': config['alignment']['rot_ch_index'],
+            'make_unique': config['alignment']['make_unique'],
+            'mode': config['alignment']['mode'],
+            'continue_from_previous': config['alignment']['continue_from_previous']
+    }
+    return settings
+
+
 def execute_step(config):
     step_name = 'alignment'
-    project_dir = pathlib.Path(config['project_dir'])
-    path_to_manifest = project_dir / 'prep_single_cells/cell_manifest.csv'
-    rot_ch_index = config['alignment']['rot_ch_index']
-    make_unique = config['alignment']['make_unique']
-    mode = config['alignment']['mode']
+    settings = get_alignment_settings(config)
 
-    check_dir_exists(project_dir)
+    check_dir_exists(settings['project_dir'])
 
-    cell_df = pd.read_csv(path_to_manifest, index_col=0)
+    cell_df = pd.read_csv(settings['path_to_manifest'], index_col=0)
 
     # Since we are applying alignment, rename old crop_seg and crop_raw
     # Because we want to use the aligned images in future steps
@@ -164,10 +173,19 @@ def execute_step(config):
         }
     )
 
-    step_dir = create_step_dir(project_dir, step_name)
+    step_dir = create_step_dir(settings['project_dir'], step_name)
 
     logger = step_logger(step_name, step_dir)
     logger.info(sys.argv)
+
+    if settings['continue_from_previous']:
+        # In the event a previous run was aborted, e.g. due to no disk space
+        # Recreate the cell_df as if we were mid run
+        done_fovs = pd.read_csv(step_dir / 'manifest.csv')
+        # Save old manifest in case I screwed up (can remove once I am sure it works properly)
+        done_fovs.to_csv(step_dir / 'old_manifest.csv')
+        not_done_fovs = cell_df[~cell_df['fov_id'].isin(done_fovs['fov_id'])]
+        cell_df = pd.concat([done_fovs, not_done_fovs])
 
     fov_df = create_fov_dataframe_from_cell_dataframe(cell_df)
 
@@ -176,13 +194,18 @@ def execute_step(config):
     cell_angles = []
 
     for fov in fov_df.itertuples(index=False):
+
+        if settings['continue_from_previous'] and fov.fov_id in done_fovs.fov_id.values:
+            print('Skipping alignment for', fov.fov_id)
+            continue
+
         print('starting alignment for', fov.fov_id)
         seg_reader = AICSImage(fov.fov_seg_path)
 
         # TODO: For now, nm and cell centroid calculation will just use the
         # membrane channel. But it could be useful to have an option
         # to rotate about the centroid calculated from the nucleus channel.
-        seg_img = seg_reader.get_image_data('ZYX', S=0, T=0, C=rot_ch_index)
+        seg_img = seg_reader.get_image_data('ZYX', S=0, T=0, C=settings['rot_ch_index'])
         pixel_size_xyz = ast.literal_eval(fov.pixel_size_xyz)
 
         seg_img, nm_centroid = interpolate_fov_in_z(seg_img, pixel_size_xyz)
@@ -209,7 +232,7 @@ def execute_step(config):
             rotation_angle, cell_centroid = calculate_alignment_angle_2d(
                     image=cell_img,
                     origin=nm_centroid,
-                    make_unique=make_unique
+                    make_unique=settings['make_unique']
             )
 
             # Apply xy alignment to seg and raw crops
@@ -234,6 +257,8 @@ def execute_step(config):
                         interpolation_order=0,
                         flip_angle_sign=True
                 )
+
+                mode = settings['mode']
 
                 if mode == 'xy_xz':
                     # Do an additional rotation to align xy long axis to z axis
@@ -266,7 +291,6 @@ def execute_step(config):
                     'crop_raw': raw_path,
                     'crop_seg': seg_path
                 })
-
 
         # Add to cell_df
         fov_centroid_df = pd.DataFrame(nm_centroids)
