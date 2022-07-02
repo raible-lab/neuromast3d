@@ -176,87 +176,7 @@ def prepare_fov(fov, settings, cell_df):
     return current_fov_cells, fov_info, seg_img
 
 
-def align_all_fov_cells(fov, current_fov_cells, fov_info, seg_img, settings, logger, step_dir):
-    for cell in current_fov_cells.itertuples(index=False):
-
-        # Initialize a dict in which to store cell info
-        cell_info = fov_info
-        cell_info['CellId'] = cell.CellId
-
-        label = int(cell.label)
-
-        print('Aligning ', cell.label)
-
-        cell_img = np.where(seg_img == label, 1, 0)
-
-        # Calculate alignment angle in xy plane
-        cell_img = cell_img.astype(np.uint8)
-        cell_img = cell_img * 255
-        rotation_angle, cell_centroid = calculate_alignment_angle_2d(
-                image=cell_img,
-                origin=cell_info['nm_centroid'],
-                make_unique=settings['make_unique']
-        )
-        cell_info['rotation_angle'] = rotation_angle
-        cell_info['centroid'] = cell_centroid
-
-        # Apply xy alignment to seg and raw crops
-        raw_cell, seg_cell = read_raw_and_seg_img(cell.crop_raw_pre_alignment, cell.crop_seg_pre_alignment)
-
-        # Rotate function expects multichannel image
-        try:
-            if seg_cell.ndim == 3:
-                seg_cell = np.expand_dims(seg_cell, axis=0)
-            seg_cell_aligned = rotate_image_2d_custom(
-                    image=seg_cell,
-                    angle=rotation_angle,
-                    interpolation_order=0,
-                    flip_angle_sign=True
-            )
-
-            if raw_cell.ndim == 3:
-                raw_cell = np.expand_dims(raw_cell, axis=0)
-            raw_cell_aligned = rotate_image_2d_custom(
-                    image=raw_cell,
-                    angle=rotation_angle,
-                    interpolation_order=0,
-                    flip_angle_sign=True
-            )
-
-            mode = settings['mode']
-
-            if mode == 'xy_xz':
-                # Do an additional rotation to align xy long axis to z axis
-                # TODO: save this angle too?
-                raw_cell_aligned, seg_cell_aligned = align_cell_xz_long_axis_to_z_axis(raw_cell_aligned, seg_cell_aligned)
-
-            # Save aligned single cell mask and raw image
-            if mode == 'xy_xz_yz':
-                raw_cell_aligned, seg_cell_aligned = align_cell_xz_long_axis_to_z_axis(raw_cell_aligned, seg_cell_aligned)
-                raw_cell_aligned, seg_cell_aligned = align_cell_yz_long_axis_to_z_axis(raw_cell_aligned, seg_cell_aligned)
-        
-        except MemoryError as e:
-            print(e)
-            logger.info('For cell %s of %s, encountered error: %s',
-                        label, fov.fov_id, e)
-            continue
-
-        else:
-            current_cell_dir = f'{step_dir}/{fov.fov_id}/{label}'
-            raw_path, seg_path = save_raw_and_seg_cell(raw_cell_aligned, seg_cell_aligned, current_cell_dir)
-
-            cell_info['crop_raw'] = raw_path
-            cell_info['crop_seg'] = seg_path
-
-    return cell_info
-
-
-def execute_step(config):
-    step_name = 'alignment'
-    settings = get_alignment_settings(config)
-
-    check_dir_exists(settings['project_dir'])
-
+def prepare_cell_and_fov_datasets(settings, step_dir):
     cell_df = pd.read_csv(settings['path_to_manifest'], index_col=0)
 
     # Since we are applying alignment, rename old crop_seg and crop_raw
@@ -267,11 +187,6 @@ def execute_step(config):
         }
     )
 
-    step_dir = create_step_dir(settings['project_dir'], step_name)
-
-    logger = step_logger(step_name, step_dir)
-    logger.info(sys.argv)
-
     if settings['continue_from_previous']:
         # In the event a previous run was aborted, e.g. due to no disk space
         # Recreate the cell_df as if we were mid run
@@ -280,27 +195,107 @@ def execute_step(config):
         done_fovs.to_csv(step_dir / 'old_manifest.csv')
         not_done_fovs = cell_df[~cell_df['fov_id'].isin(done_fovs['fov_id'])]
         cell_df = pd.concat([done_fovs, not_done_fovs])
+        fov_df = create_fov_dataframe_from_cell_dataframe(not_done_fovs)
 
-    fov_df = create_fov_dataframe_from_cell_dataframe(cell_df)
+    else:
+        fov_df = create_fov_dataframe_from_cell_dataframe(cell_df)
+    
+    return cell_df, fov_df
+
+
+def execute_step(config):
+    step_name = 'alignment'
+    settings = get_alignment_settings(config)
+
+    check_dir_exists(settings['project_dir'])
+    step_dir = create_step_dir(settings['project_dir'], step_name)
+
+    logger = step_logger(step_name, step_dir)
+    logger.info(sys.argv)
+
+    cell_df, fov_df = prepare_cell_and_fov_datasets(settings, step_dir)
 
     # Calculate neuromast centroid and rotation angles
     cell_angles = []
 
     for fov in fov_df.itertuples(index=False):
 
-        if settings['continue_from_previous'] and fov.fov_id in done_fovs.fov_id.values:
-            print('Skipping alignment for', fov.fov_id)
-            continue
-        
         current_fov_cells, fov_info, seg_img = prepare_fov(fov, settings, cell_df)
-
         print('fov preparation complete')
 
-        cell_info = align_all_fov_cells(fov, current_fov_cells, fov_info, seg_img, settings, logger, step_dir)
+        for cell in current_fov_cells.itertuples(index=False):
 
-        # Save angle matched to cell_id
-        # Also saves cell centroid and paths for rotated single cells
-        cell_angles.append(cell_info)
+            # Initialize a dict in which to store cell info
+            cell_info = fov_info
+            cell_info['CellId'] = cell.CellId
+
+            label = int(cell.label)
+
+            cell_img = np.where(seg_img == label, 1, 0)
+
+            print('Aligning ', cell.label)
+
+            # Calculate alignment angle in xy plane
+            cell_img = cell_img.astype(np.uint8)
+            cell_img = cell_img * 255
+            rotation_angle, cell_centroid = calculate_alignment_angle_2d(
+                    image=cell_img,
+                    origin=cell_info['nm_centroid'],
+                    make_unique=settings['make_unique']
+            )
+            cell_info['rotation_angle'] = rotation_angle
+            cell_info['centroid'] = cell_centroid
+
+            # Apply xy alignment to seg and raw crops
+            raw_cell, seg_cell = read_raw_and_seg_img(cell.crop_raw_pre_alignment, cell.crop_seg_pre_alignment)
+            
+            mode = settings['mode']
+
+            # Rotate function expects multichannel image
+            try:
+                if mode == 'xy_only' or 'xy_xz' or 'xy_xz_yz':
+                    if seg_cell.ndim == 3:
+                        seg_cell = np.expand_dims(seg_cell, axis=0)
+                    seg_cell_aligned = rotate_image_2d_custom(
+                            image=seg_cell,
+                            angle=rotation_angle,
+                            interpolation_order=0,
+                            flip_angle_sign=True
+                    )
+
+                    if raw_cell.ndim == 3:
+                        raw_cell = np.expand_dims(raw_cell, axis=0)
+                    raw_cell_aligned = rotate_image_2d_custom(
+                            image=raw_cell,
+                            angle=rotation_angle,
+                            interpolation_order=0,
+                            flip_angle_sign=True
+                    )
+
+                if mode == 'xy_xz' or 'xy_xz_yz':
+                    # Do an additional rotation to align xy long axis to z axis
+                    # TODO: save this angle too?
+                    raw_cell_aligned, seg_cell_aligned = align_cell_xz_long_axis_to_z_axis(raw_cell_aligned, seg_cell_aligned)
+
+                if mode == 'xy_xz_yz':
+                    raw_cell_aligned, seg_cell_aligned = align_cell_yz_long_axis_to_z_axis(raw_cell_aligned, seg_cell_aligned)
+            
+            except MemoryError as e:
+                print(e)
+                logger.info('For cell %s of %s, encountered error: %s',
+                            label, fov.fov_id, e)
+                continue
+
+            else:
+                current_cell_dir = f'{step_dir}/{fov.fov_id}/{label}'
+                raw_path, seg_path = save_raw_and_seg_cell(raw_cell_aligned, seg_cell_aligned, current_cell_dir)
+
+                cell_info['crop_raw'] = raw_path
+                cell_info['crop_seg'] = seg_path
+
+                # Save angle matched to cell_id
+                # Also saves cell centroid and paths for rotated single cells
+                cell_angles.append(cell_info)
 
         # Save angles to cell manifest
         angle_df = pd.DataFrame(cell_angles)
