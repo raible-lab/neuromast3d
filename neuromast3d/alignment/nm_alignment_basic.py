@@ -11,6 +11,7 @@ import ast
 import argparse
 import pathlib
 import sys
+from typing import Tuple
 
 from aicsimageio import AICSImage
 from aicsimageprocessing import resize, resize_to
@@ -89,27 +90,29 @@ def calculate_alignment_angle_2d(
     return angle, centroid
 
 
-def align_cell_xz_long_axis_to_z_axis(raw_cell, seg_cell):
-    assert raw_cell.ndim == 4 and seg_cell.ndim == 4
+def calculate_2d_long_axis_angle_to_z_axis(seg_cell, proj_type: str):
+    assert seg_cell.ndim == 4
     _, z, y, x = np.nonzero(seg_cell)
-    xz = np.hstack([x.reshape(-1, 1), z.reshape(-1, 1)])
+    if proj_type == 'xz':
+        coords = np.hstack([x.reshape(-1, 1), z.reshape(-1, 1)])
+    elif proj_type == 'yz':
+        coords = np.hstack([y.reshape(-1, 1), z.reshape(-1, 1)])
     pca = PCA(n_components=2)
-    pca = pca.fit(xz)
+    pca = pca.fit(coords)
     eigenvecs = pca.components_
     angle = 180 * np.arctan(eigenvecs[0][0]/eigenvecs[0][1]) / np.pi
+    return angle
+
+
+def align_cell_xz_long_axis_to_z_axis(raw_cell, seg_cell):
+    angle = calculate_2d_long_axis_angle_to_z_axis(seg_cell, 'xz')
     seg_cell_aligned = ndi.rotate(seg_cell, -angle, axes=(1, 3), order=0)
     raw_cell_aligned = ndi.rotate(raw_cell, -angle, axes=(1, 3), order=0)
     return raw_cell_aligned, seg_cell_aligned
 
 
 def align_cell_yz_long_axis_to_z_axis(raw_cell, seg_cell):
-    assert raw_cell.ndim == 4 and seg_cell.ndim == 4
-    _, z, y, x = np.nonzero(seg_cell)
-    yz = np.hstack([y.reshape(-1, 1), z.reshape(-1, 1)])
-    pca = PCA(n_components=2)
-    pca = pca.fit(yz)
-    eigenvecs = pca.components_
-    angle = 180 * np.arctan(eigenvecs[0][0]/eigenvecs[0][1]) / np.pi
+    angle = calculate_2d_long_axis_angle_to_z_axis(seg_cell, 'yz')
     seg_cell_aligned = ndi.rotate(seg_cell, -angle, axes=(1, 2), order=0)
     raw_cell_aligned = ndi.rotate(raw_cell, -angle, axes=(1, 2), order=0)
     return raw_cell_aligned, seg_cell_aligned
@@ -201,6 +204,29 @@ def prepare_cell_and_fov_datasets(settings, step_dir):
         fov_df = create_fov_dataframe_from_cell_dataframe(cell_df)
     
     return cell_df, fov_df
+
+
+def calculate_alignment_angles(
+    img: np.ndarray, 
+    mode: str, 
+    origin: Tuple, 
+    make_unique: bool
+) -> Tuple:
+    angle_1, angle_2, angle_3 = (0, 0, 0)
+    if mode == 'xy_only':
+            angle_1, _ = calculate_alignment_angle_2d(
+                    image=img,
+                    origin=origin,
+                    make_unique=make_unique
+            )
+    
+    if mode == 'xy_xz':
+        pass
+    
+    if mode == 'xy_xz_yz':
+        pass
+
+    return angle_1, angle_2, angle_3
 
 
 def execute_step(config):
