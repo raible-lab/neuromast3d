@@ -72,6 +72,6 @@ alignment:
         # whether to make the rotation unique
         make_unique: True
         # alignment method to use
-        # available modes: xy_only, xy_xz, xy_xz_yz, principal_axes
+        # available modes: unaligned, xy_only, xy_xz, xy_xz_yz, principal_axes
         # see README for details
         mode: xy_xz_yz
