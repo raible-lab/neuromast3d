@@ -52,9 +52,12 @@ single cells that have been aligned/rotated using some strategy. A
 cell_manifest.csv that points to the aligned cells is also generated and can
 be used as input to cvapipe_analysis.
 
-Available alignement methods (TBD):
-    - xy_xz
-    - xy_xz_yz
+Available alignement methods:
+    1. unaligned: sets all alignment angles to 0 - i.e. the image is not aligned at all
+    2. xy_only: the cell is rotated around the z-axis so that the vector pointing from the cell centroid to the neuromast centroid is aligned with the x-axis (3 o'clock position)
+    3. xy_xz: the xy_only rotation, plus a rotation around the y-axis such that the principal axis of a 2D xz projection of the image aligns with the z-axis
+    4. xy_xz_yz: the xy_xz rotations, plus a rotation around the x-axis such that the princiapl axis of a 2D yz projection of the image aligns with the z-axis
+    5. principal_axes: the image is rotated so that the three major axes of the image (calculated by PCA) lie along the x, y, and z axes
 
 # Current steps to reproduce 
 This will likely be updated in the future as I look into things like using

@@ -213,15 +213,20 @@ def calculate_alignment_angles(
     origin: Tuple, 
     make_unique: bool
 ) -> Tuple:
+    # Initialize angles at 0 because some methods only calcualte 1-2 angles
     angle_1, angle_2, angle_3 = (0, 0, 0)
-    if mode == 'xy_only':
+
+    if mode == 'unaligned':
+        angle_1, angle_2, angle_3 = (0, 0, 0)
+
+    if mode == 'xy_only' or 'xy_xz' or 'xy_xz_yz':
         angle_1, _ = calculate_alignment_angle_2d(
                 image=img,
                 origin=origin,
                 make_unique=make_unique
         )
     
-    if mode == 'xy_xz':
+    if mode == 'xy_xz' or 'xy_xz_yz':
         angle_2 = calculate_2d_long_axis_angle_to_z_axis(
             img,
             'xz'
@@ -284,6 +289,9 @@ def execute_step(config):
                 make_unique=True
             )
 
+            # TODO: may need to change naming convention for rotation angles
+            # e.g. even if not using xy_only rotation mode
+            # might need that angle for downstream steps...
             cell_info['rotation_angle'] = angle_1
             cell_info['rotation_angle_2'] = angle_2
             cell_info['rotation_angle_3'] = angle_3
