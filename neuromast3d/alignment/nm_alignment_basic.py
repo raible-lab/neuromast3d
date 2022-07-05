@@ -21,6 +21,7 @@ from skimage.morphology import binary_closing, ball
 from sklearn.decomposition import PCA
 import scipy.ndimage as ndi
 import yaml
+from neuromast3d.prep_single_cells.utils import apply_3d_rotation, rotate_image_3d
 
 from neuromast3d.step_utils import read_raw_and_seg_img, check_dir_exists, step_logger, create_step_dir, save_raw_and_seg_cell
 from neuromast3d.alignment.utils import rotate_image_2d_custom
@@ -214,17 +215,28 @@ def calculate_alignment_angles(
 ) -> Tuple:
     angle_1, angle_2, angle_3 = (0, 0, 0)
     if mode == 'xy_only':
-            angle_1, _ = calculate_alignment_angle_2d(
-                    image=img,
-                    origin=origin,
-                    make_unique=make_unique
-            )
+        angle_1, _ = calculate_alignment_angle_2d(
+                image=img,
+                origin=origin,
+                make_unique=make_unique
+        )
     
     if mode == 'xy_xz':
-        pass
+        angle_2 = calculate_2d_long_axis_angle_to_z_axis(
+            img,
+            'xz'
+        )
     
     if mode == 'xy_xz_yz':
-        pass
+        angle_3 = calculate_2d_long_axis_angle_to_z_axis(
+            img,
+            'yz'
+        )
+
+    if mode == 'principal_axes':
+        angle_1, angle_2, angle_3 = rotate_image_3d(
+            img
+        )
 
     return angle_1, angle_2, angle_3
 
@@ -261,51 +273,30 @@ def execute_step(config):
 
             print('Aligning ', cell.label)
 
-            # Calculate alignment angle in xy plane
+            # Calculate alignment angles
             cell_img = cell_img.astype(np.uint8)
             cell_img = cell_img * 255
-            rotation_angle, cell_centroid = calculate_alignment_angle_2d(
-                    image=cell_img,
-                    origin=cell_info['nm_centroid'],
-                    make_unique=settings['make_unique']
+            cell_centroid = ndi.center_of_mass(cell_img)
+            angle_1, angle_2, angle_3 = calculate_alignment_angles(
+                cell_img, 
+                mode=settings['mode'],
+                origin=cell_info['nm_centroid'],
+                make_unique=True
             )
-            cell_info['rotation_angle'] = rotation_angle
+
+            cell_info['rotation_angle'] = angle_1
+            cell_info['rotation_angle_2'] = angle_2
+            cell_info['rotation_angle_3'] = angle_3
             cell_info['centroid'] = cell_centroid
 
             # Apply xy alignment to seg and raw crops
             raw_cell, seg_cell = read_raw_and_seg_img(cell.crop_raw_pre_alignment, cell.crop_seg_pre_alignment)
             
-            mode = settings['mode']
-
             # Rotate function expects multichannel image
             try:
-                if mode == 'xy_only' or 'xy_xz' or 'xy_xz_yz':
-                    if seg_cell.ndim == 3:
-                        seg_cell = np.expand_dims(seg_cell, axis=0)
-                    seg_cell_aligned = rotate_image_2d_custom(
-                            image=seg_cell,
-                            angle=rotation_angle,
-                            interpolation_order=0,
-                            flip_angle_sign=True
-                    )
+                raw_cell_aligned = apply_3d_rotation(raw_cell, angle_1, angle_2, angle_3)
+                seg_cell_aligned = apply_3d_rotation(seg_cell, angle_1, angle_2, angle_3)
 
-                    if raw_cell.ndim == 3:
-                        raw_cell = np.expand_dims(raw_cell, axis=0)
-                    raw_cell_aligned = rotate_image_2d_custom(
-                            image=raw_cell,
-                            angle=rotation_angle,
-                            interpolation_order=0,
-                            flip_angle_sign=True
-                    )
-
-                if mode == 'xy_xz' or 'xy_xz_yz':
-                    # Do an additional rotation to align xy long axis to z axis
-                    # TODO: save this angle too?
-                    raw_cell_aligned, seg_cell_aligned = align_cell_xz_long_axis_to_z_axis(raw_cell_aligned, seg_cell_aligned)
-
-                if mode == 'xy_xz_yz':
-                    raw_cell_aligned, seg_cell_aligned = align_cell_yz_long_axis_to_z_axis(raw_cell_aligned, seg_cell_aligned)
-            
             except MemoryError as e:
                 print(e)
                 logger.info('For cell %s of %s, encountered error: %s',
