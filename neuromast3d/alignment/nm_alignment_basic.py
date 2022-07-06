@@ -219,14 +219,14 @@ def calculate_alignment_angles(
     if mode == 'unaligned':
         angle_1, angle_2, angle_3 = (0, 0, 0)
 
-    if mode == 'xy_only' or 'xy_xz' or 'xy_xz_yz':
+    if mode in ('xy_only', 'xy_xz', 'xy_xz_yz'):
         angle_1, _ = calculate_alignment_angle_2d(
                 image=img,
                 origin=origin,
                 make_unique=make_unique
         )
     
-    if mode == 'xy_xz' or 'xy_xz_yz':
+    if mode in ('xy_xz', 'xy_xz_yz'):
         angle_2 = calculate_2d_long_axis_angle_to_z_axis(
             img,
             'xz'
