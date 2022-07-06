@@ -9,6 +9,7 @@ and does not try to align cells to an organismal axis (e.g. A/P, D/V).
 
 import ast
 import argparse
+from functools import partial
 import pathlib
 import sys
 from typing import Tuple
@@ -21,6 +22,7 @@ from skimage.morphology import binary_closing, ball
 from sklearn.decomposition import PCA
 import scipy.ndimage as ndi
 import yaml
+from neuromast3d.prep_single_cells.prep_single_cells import apply_function_to_all_channels, inherit_labels
 from neuromast3d.prep_single_cells.utils import apply_3d_rotation, rotate_image_3d
 
 from neuromast3d.step_utils import read_raw_and_seg_img, check_dir_exists, step_logger, create_step_dir, save_raw_and_seg_cell
@@ -165,16 +167,17 @@ def prepare_fov(fov, settings, cell_df):
     print('starting alignment for', fov.fov_id)
     seg_reader = AICSImage(fov.fov_seg_path)
 
-    # TODO: For now, nm and cell centroid calculation will just use the
-    # membrane channel. But it could be useful to have an option
-    # to rotate about the centroid calculated from the nucleus channel.
     seg_img = seg_reader.get_image_data('ZYX', S=0, T=0, C=settings['rot_ch_index'])
     pixel_size_xyz = ast.literal_eval(fov.pixel_size_xyz)
+
+    # Inherit labels from cell again (hopefully this doesn't cause memory issues)
+    mem_seg = seg_reader.get_image_data('ZYX', S=0, T=0, C=fov.cell_seg)
+    seg_img = inherit_labels(seg_img, mem_seg)
+    mem_seg = 0
 
     seg_img, nm_centroid = interpolate_fov_in_z(seg_img, pixel_size_xyz)
     fov_info = {'nm_centroid': nm_centroid, 'fov_id': fov.fov_id}
 
-    # Subset cell df for this fov
     current_fov_cells = cell_df[cell_df['fov_id'] == fov.fov_id]
 
     return current_fov_cells, fov_info, seg_img
@@ -276,7 +279,6 @@ def execute_step(config):
 
             cell_img = np.where(seg_img == label, 1, 0)
 
-            print('Aligning ', cell.label)
 
             # Calculate alignment angles
             cell_img = cell_img.astype(np.uint8)
