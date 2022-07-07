@@ -307,7 +307,7 @@ def execute_step(config):
                 raw_cell_aligned = apply_3d_rotation(raw_cell, angle_1, angle_2, angle_3)
                 seg_cell_aligned = apply_3d_rotation(seg_cell, angle_1, angle_2, angle_3)
 
-            except MemoryError as e:
+            except (MemoryError, ValueError) as e:
                 print(e)
                 logger.info('For cell %s of %s, encountered error: %s',
                             label, fov.fov_id, e)
