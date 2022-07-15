@@ -140,7 +140,8 @@ def test_align_cell_xz_long_axis_to_z_axis_rot_ellip(rotated_ellipsoid):
 @pytest.mark.parametrize(
     'mode, origin, expected', [
         ('unaligned', (0, 0, 0), (0, 0, 0)),
-        ('principal_axes', (0, 0, 0), (-60, -45, -30))
+        ('principal_axes', (0, 0, 0), (-60, -45, -30)),
+        ('xy_only', (0, 0, 0), (-45, 0, 0))
     ]
 )
 def test_calculate_alignment_angles(rotated_ellipsoid, mode, origin, expected):

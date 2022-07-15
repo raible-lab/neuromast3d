@@ -49,13 +49,15 @@ class TestPipeline:
         assert pred_output_csv.exists()
 
     
-    @pytest.fixture(params=['', 'xy_xz'])
+    #@pytest.fixture(params=['', 'xy_xz'])
+    @pytest.fixture()
     def alignment_config(self, base_config, request):
         config = base_config
         config['alignment']['state'] = True
         config['alignment']['rot_ch_index'] = 1
         config['alignment']['make_unique'] = True
-        config['alignment']['mode'] = f'{request.param}'
+        #config['alignment']['mode'] = f'{request.param}'
+        config['alignment']['mode'] = 'xy_xz_yz'
         config['alignment']['continue_from_previous'] = False
         return config
 
