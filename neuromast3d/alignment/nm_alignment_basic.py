@@ -200,7 +200,7 @@ def prepare_cell_and_fov_datasets(settings, step_dir):
         done_fovs = pd.read_csv(step_dir / 'manifest.csv')
         # Save old manifest in case I screwed up (can remove once I am sure it works properly)
         done_fovs.to_csv(step_dir / 'old_manifest.csv')
-        not_done_fovs = cell_df[~cell_df['fov_id'].isin(done_fovs['fov_id'])]
+        not_done_fovs = cell_df[~cell_df['fov_id'].isin(done_fovs['fov_id_x'])]
         cell_df = pd.concat([done_fovs, not_done_fovs])
         fov_df = create_fov_dataframe_from_cell_dataframe(not_done_fovs)
 
@@ -272,24 +272,33 @@ def execute_step(config):
         for cell in current_fov_cells.itertuples(index=False):
 
             # Initialize a dict in which to store cell info
-            cell_info = fov_info
+            cell_info = {}
+            cell_info['nm_centroid'] = fov_info['nm_centroid']
+            cell_info['fov_id'] = fov.fov_id
             cell_info['CellId'] = cell.CellId
+            print('Aligning', cell.CellId)
 
             label = int(cell.label)
 
             cell_img = np.where(seg_img == label, 1, 0)
 
-
             # Calculate alignment angles
             cell_img = cell_img.astype(np.uint8)
             cell_img = cell_img * 255
             cell_centroid = ndi.center_of_mass(cell_img)
-            angle_1, angle_2, angle_3 = calculate_alignment_angles(
-                cell_img, 
-                mode=settings['mode'],
-                origin=cell_info['nm_centroid'],
-                make_unique=True
-            )
+            try:
+                angle_1, angle_2, angle_3 = calculate_alignment_angles(
+                    cell_img, 
+                    mode=settings['mode'],
+                    origin=cell_info['nm_centroid'],
+                    make_unique=True
+                )
+            
+            except ValueError as e:
+                print(e)
+                logger.info('For cell %s of %s, encountered error: %s',
+                            label, fov.fov_id, e)
+                continue
 
             # TODO: may need to change naming convention for rotation angles
             # e.g. even if not using xy_only rotation mode
@@ -322,7 +331,7 @@ def execute_step(config):
 
                 # Save angle matched to cell_id
                 # Also saves cell centroid and paths for rotated single cells
-                cell_angles.append(cell_info)
+                cell_angles.append({**cell_info})
 
         # Save angles to cell manifest
         angle_df = pd.DataFrame(cell_angles)
