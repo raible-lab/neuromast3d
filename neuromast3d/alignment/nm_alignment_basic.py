@@ -94,8 +94,8 @@ def calculate_alignment_angle_2d(
 
 
 def calculate_2d_long_axis_angle_to_z_axis(seg_cell, proj_type: str):
-    assert seg_cell.ndim == 4
-    _, z, y, x = np.nonzero(seg_cell)
+    assert seg_cell.ndim == 3
+    z, y, x = np.nonzero(seg_cell)
     if proj_type == 'xz':
         coords = np.hstack([x.reshape(-1, 1), z.reshape(-1, 1)])
     elif proj_type == 'yz':
@@ -272,8 +272,11 @@ def execute_step(config):
         for cell in current_fov_cells.itertuples(index=False):
 
             # Initialize a dict in which to store cell info
-            cell_info = fov_info
+            cell_info = {}
+            cell_info['nm_centroid'] = fov_info['nm_centroid']
+            cell_info['fov_id'] = fov.fov_id
             cell_info['CellId'] = cell.CellId
+            print('Aligning', cell.CellId)
 
             label = int(cell.label)
 
@@ -328,7 +331,7 @@ def execute_step(config):
 
                 # Save angle matched to cell_id
                 # Also saves cell centroid and paths for rotated single cells
-                cell_angles.append(cell_info)
+                cell_angles.append({**cell_info})
 
         # Save angles to cell manifest
         angle_df = pd.DataFrame(cell_angles)
