@@ -10,7 +10,7 @@ from skimage.draw import ellipsoid
 from skimage.transform import rotate
 
 from neuromast3d.alignment.utils import find_major_axis_by_pca, rotate_image_2d_custom
-from neuromast3d.alignment.nm_alignment_basic import align_cell_xz_long_axis_to_z_axis, calculate_alignment_angle_2d, calculate_alignment_angles
+from neuromast3d.alignment.nm_alignment_basic import align_cell_xz_long_axis_to_z_axis, calculate_alignment_angle_2d, calculate_alignment_angles, normalize_centroid
 from neuromast3d.prep_single_cells.prep_single_cells import create_cropping_roi, crop_to_roi
 
 
@@ -74,10 +74,9 @@ def test_rotate():
 )
 def test_calculate_alignment_angle_2d(origin, expected_angle):
     image = ellipsoid(10, 10, 10)
-    angle, centroid = calculate_alignment_angle_2d(
-            image=image,
-            origin=origin,
-            make_unique=True
+    centroid_normed = normalize_centroid(image, origin)
+    angle = calculate_alignment_angle_2d(
+            centroid_normed=centroid_normed
     )
     np.testing.assert_almost_equal(angle, expected_angle)
 
@@ -146,5 +145,7 @@ def test_align_cell_xz_long_axis_to_z_axis_rot_ellip(rotated_ellipsoid):
 )
 def test_calculate_alignment_angles(rotated_ellipsoid, mode, origin, expected):
     _, _, ellip_rot3 = rotated_ellipsoid
-    angles = calculate_alignment_angles(img=ellip_rot3, mode=mode, origin=origin, make_unique=True)
+    centroid_normed = normalize_centroid(ellip_rot3, origin)
+    ellip_rot3 = ellip_rot3[np.newaxis, :, :, :]
+    angles = calculate_alignment_angles(img=ellip_rot3, mode=mode, use_channels=0, centroid_normed=centroid_normed)
     np.testing.assert_allclose(angles, expected, rtol=1e-03)

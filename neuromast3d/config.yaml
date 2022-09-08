@@ -67,7 +67,7 @@ alignment:
         state: True 
         # allow to continue from previous partially completed run
         continue_from_previous: False
-        # channel in the seg img to use to calculate the rotation angle
+        # channel in the seg img to use to calculate the radial rotation angle
         rot_ch_index: 1
         # whether to make the rotation unique
         make_unique: True
@@ -75,3 +75,5 @@ alignment:
         # available modes: unaligned, xy_only, xy_xz, xy_xz_yz, principal_axes
         # see README for details
         mode: 'xy_xz_yz'
+        # channels to use to calculate tilt correction angle(s)
+        use_channels: (0, 1)

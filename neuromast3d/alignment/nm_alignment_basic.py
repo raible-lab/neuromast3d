@@ -10,9 +10,10 @@ and does not try to align cells to an organismal axis (e.g. A/P, D/V).
 import ast
 import argparse
 from functools import partial
+from locale import normalize
 import pathlib
 import sys
-from typing import Tuple
+from typing import Tuple, Union
 
 from aicsimageio import AICSImage
 from aicsimageprocessing import resize, resize_to
@@ -29,10 +30,21 @@ from neuromast3d.step_utils import read_raw_and_seg_img, check_dir_exists, step_
 from neuromast3d.alignment.utils import rotate_image_2d_custom
 
 
+def normalize_centroid(
+    image: np.array,
+    origin: tuple
+):
+    if image.ndim != 3:
+        raise ValueError(f'Invalid shape of input image {image.shape}. \
+                Image must be a single-channel, 3D stack.')
+
+    centroid = ndi.center_of_mass(image)
+    centroid_normed = np.subtract(centroid, origin)
+    return centroid_normed
+
+
 def calculate_alignment_angle_2d(
-        image: np.array,
-        origin: tuple,
-        make_unique: bool = True
+        centroid_normed: tuple,
 ):
     """Calculate 2d alignment angle for a cell compared to a user-defined
     origin to use as the axis of rotation. The centroid of the image is
@@ -67,35 +79,19 @@ def calculate_alignment_angle_2d(
         negative angles should be rotated CCW.
 
     """
-
-    if image.ndim != 3:
-        raise ValueError(f'Invalid shape of input image {image.shape}. \
-                Image must be a single-channel, 3D stack.')
-
-    centroid = ndi.center_of_mass(image)
-    centroid_normed = np.subtract(centroid, origin)
     x = centroid_normed[2]
     y = -centroid_normed[1]
 
-    if make_unique:  # NOTE: modified from original in shparam!
+    # Calculate angle with atan2 to preserve orientation
+    # I think this SHOULD align to the 3 o' clock position?
+    angle = 180 * np.arctan2(y, x) / np.pi
 
-        # Calculate angle with atan2 to preserve orientation
-        # I think this SHOULD align to the 3 o' clock position?
-        angle = 180 * np.arctan2(y, x) / np.pi
-
-    else:
-        # TODO: update or remove? Don't think this is right anymore
-        # Calculate smallest angle
-        angle = 0.0
-        if np.abs(centroid[2]) > 1e-12:  # avoid divide by zero error ig?
-            angle = 180 * np.arctan(centroid[1] / centroid[2]) / np.pi
-
-    return angle, centroid
+    return angle
 
 
 def calculate_2d_long_axis_angle_to_z_axis(seg_cell, proj_type: str):
-    assert seg_cell.ndim == 3
-    z, y, x = np.nonzero(seg_cell)
+    assert seg_cell.ndim == 4
+    _, z, y, x = np.nonzero(seg_cell)
     if proj_type == 'xz':
         coords = np.hstack([x.reshape(-1, 1), z.reshape(-1, 1)])
     elif proj_type == 'yz':
@@ -158,6 +154,7 @@ def get_alignment_settings(config) -> dict:
             'rot_ch_index': config['alignment']['rot_ch_index'],
             'make_unique': config['alignment']['make_unique'],
             'mode': config['alignment']['mode'],
+            'use_channels': config['alignment']['use_channels'],
             'continue_from_previous': config['alignment']['continue_from_previous']
     }
     return settings
@@ -213,37 +210,36 @@ def prepare_cell_and_fov_datasets(settings, step_dir):
 def calculate_alignment_angles(
     img: np.ndarray, 
     mode: str, 
-    origin: Tuple, 
-    make_unique: bool
+    use_channels: Union[int, Tuple],
+    centroid_normed: Tuple, 
 ) -> Tuple:
     # Initialize angles at 0 because some methods only calcualte 1-2 angles
     angle_1, angle_2, angle_3 = (0, 0, 0)
+    img_subsetted = img[(use_channels), :, :, :]
 
     if mode == 'unaligned':
         angle_1, angle_2, angle_3 = (0, 0, 0)
 
     if mode in ('xy_only', 'xy_xz', 'xy_xz_yz'):
-        angle_1, _ = calculate_alignment_angle_2d(
-                image=img,
-                origin=origin,
-                make_unique=make_unique
+        angle_1 = calculate_alignment_angle_2d(
+                centroid_normed=centroid_normed,
         )
     
     if mode in ('xy_xz', 'xy_xz_yz'):
         angle_2 = calculate_2d_long_axis_angle_to_z_axis(
-            img,
+            img_subsetted,
             'xz'
         )
     
     if mode == 'xy_xz_yz':
         angle_3 = calculate_2d_long_axis_angle_to_z_axis(
-            img,
+            img_subsetted,
             'yz'
         )
 
     if mode == 'principal_axes':
         angle_1, angle_2, angle_3 = rotate_image_3d(
-            img
+            img_subsetted
         )
 
     return angle_1, angle_2, angle_3
@@ -286,12 +282,17 @@ def execute_step(config):
             cell_img = cell_img.astype(np.uint8)
             cell_img = cell_img * 255
             cell_centroid = ndi.center_of_mass(cell_img)
+            cell_info['cell_centroid_normed'] = normalize_centroid(cell_img, cell_info['nm_centroid'])
+
+            # Apply xy alignment to seg and raw crops
+            raw_cell, seg_cell = read_raw_and_seg_img(cell.crop_raw_pre_alignment, cell.crop_seg_pre_alignment)
+
             try:
                 angle_1, angle_2, angle_3 = calculate_alignment_angles(
-                    cell_img, 
+                    seg_cell, 
                     mode=settings['mode'],
-                    origin=cell_info['nm_centroid'],
-                    make_unique=True
+                    use_channels=settings['use_channels'],
+                    centroid_normed=cell_info['cell_centroid_normed']
                 )
             
             except ValueError as e:
@@ -308,9 +309,6 @@ def execute_step(config):
             cell_info['rotation_angle_3'] = angle_3
             cell_info['centroid'] = cell_centroid
 
-            # Apply xy alignment to seg and raw crops
-            raw_cell, seg_cell = read_raw_and_seg_img(cell.crop_raw_pre_alignment, cell.crop_seg_pre_alignment)
-            
             # Rotate function expects multichannel image
             try:
                 raw_cell_aligned = apply_3d_rotation(raw_cell, angle_1, angle_2, angle_3)
