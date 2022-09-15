@@ -10,7 +10,7 @@ from skimage.draw import ellipsoid
 from skimage.transform import rotate
 
 from neuromast3d.alignment.utils import find_major_axis_by_pca, rotate_image_2d_custom
-from neuromast3d.alignment.nm_alignment_basic import align_cell_xz_long_axis_to_z_axis, calculate_alignment_angle_2d, calculate_alignment_angles, normalize_centroid
+from neuromast3d.alignment.nm_alignment_basic import align_cell_xz_long_axis_to_z_axis, calculate_2d_long_axis_angle_to_z_axis, calculate_alignment_angle_2d, calculate_alignment_angles, normalize_centroid
 from neuromast3d.prep_single_cells.prep_single_cells import create_cropping_roi, crop_to_roi
 
 
@@ -134,6 +134,23 @@ def test_align_cell_xz_long_axis_to_z_axis_rot_ellip(rotated_ellipsoid):
     ellip_rot2 = ellip_rot2[np.newaxis, :, :, :]
     aligned, _ = align_cell_xz_long_axis_to_z_axis(ellip_rot2, ellip_rot2)
     np.testing.assert_allclose(aligned, expected)
+
+
+@pytest.mark.parametrize(
+    'init_angle, expected_angle, axes, proj_type', [
+        (0, -90, (0,2), 'xz'),
+        (15, 75, (0,2), 'xz'),
+        (45, 45, (0,2), 'xz'),
+        (90, 0, (0,2), 'xz'),
+        (-15, -75, (0,2), 'xz'),
+        (15, 75, (0,1), 'yz')
+    ]
+)
+def test_calculate_2d_long_axis_angle_to_z_axis(orig_ellipsoid, init_angle, expected_angle, axes, proj_type):
+    ellip_rotated = ndi.rotate(orig_ellipsoid, init_angle, axes, order=0)
+    ellip_rotated = ellip_rotated[np.newaxis, :, :, :]
+    actual_angle = calculate_2d_long_axis_angle_to_z_axis(ellip_rotated, proj_type)
+    np.testing.assert_almost_equal(actual_angle, expected_angle, decimal=2)
 
 
 @pytest.mark.parametrize(

@@ -53,6 +53,7 @@ def calculate_alignment_angle_2d(
     the xy-plane. The rotation angle between this vector and the x-axis
     (3 o'clock position) is then calculated.
 
+
     Parameters
     ----------
     image : np.array
@@ -70,7 +71,7 @@ def calculate_alignment_angle_2d(
         Default True.
 
     Returns
-    -------
+    -------rotation_45_deg_corrrotation_45_deg_corrrotation_45_deg_corrrotation_45_deg_corr
     Tuple[float, np.array]
         The angle for rotation and the image centroid after subtracting
         the defined origin. The sign of the angle can be positive or negative,
@@ -100,6 +101,9 @@ def calculate_2d_long_axis_angle_to_z_axis(seg_cell, proj_type: str):
     pca = pca.fit(coords)
     eigenvecs = pca.components_
     angle = 180 * np.arctan(eigenvecs[0][0]/eigenvecs[0][1]) / np.pi
+    # Angle needs to be negative for downstream steps to work, I think
+    # (not entirely sure why, probably a coord system thing)
+    angle = -angle
     return angle
 
 
