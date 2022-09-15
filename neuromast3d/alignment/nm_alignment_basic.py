@@ -211,7 +211,7 @@ def calculate_alignment_angles(
     img: np.ndarray, 
     mode: str, 
     use_channels: Union[int, Tuple],
-    centroid_normed: Tuple, 
+    centroid_normed: Tuple
 ) -> Tuple:
     # Initialize angles at 0 because some methods only calcualte 1-2 angles
     angle_1, angle_2, angle_3 = (0, 0, 0)

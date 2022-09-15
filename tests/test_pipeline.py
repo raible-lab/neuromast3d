@@ -58,6 +58,7 @@ class TestPipeline:
         config['alignment']['make_unique'] = True
         #config['alignment']['mode'] = f'{request.param}'
         config['alignment']['mode'] = 'xy_xz_yz'
+        config['alignment']['use_channels'] = (0, 1)
         config['alignment']['continue_from_previous'] = False
         return config
 
