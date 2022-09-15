@@ -71,8 +71,6 @@ def calculate_alignment_angle_2d(
         Default True.
 
     Returns
-    -------rotation_45_deg_corrrotation_45_deg_corrrotation_45_deg_corrrotation_45_deg_corr
-    Tuple[float, np.array]
         The angle for rotation and the image centroid after subtracting
         the defined origin. The sign of the angle can be positive or negative,
         depending on where the cell centroid was relative to the origin.
