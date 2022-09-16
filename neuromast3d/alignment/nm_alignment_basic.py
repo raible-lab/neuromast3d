@@ -89,7 +89,12 @@ def calculate_alignment_angle_2d(
 
 
 def calculate_2d_long_axis_angle_to_z_axis(seg_cell, proj_type: str):
-    assert seg_cell.ndim == 4
+    if seg_cell.ndim == 3:
+        seg_cell = seg_cell[np.newaxis, :, :, :]
+    elif seg_cell == 4:
+        seg_cell = seg_cell
+    else:
+        raise ValueError('Seg cell ndims must be 3 or 4')
     _, z, y, x = np.nonzero(seg_cell)
     if proj_type == 'xz':
         coords = np.hstack([x.reshape(-1, 1), z.reshape(-1, 1)])
