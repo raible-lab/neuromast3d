@@ -91,10 +91,11 @@ def calculate_alignment_angle_2d(
 def calculate_2d_long_axis_angle_to_z_axis(seg_cell, proj_type: str):
     if seg_cell.ndim == 3:
         seg_cell = seg_cell[np.newaxis, :, :, :]
-    elif seg_cell == 4:
+    elif seg_cell.ndim == 4:
         seg_cell = seg_cell
     else:
         raise ValueError('Seg cell ndims must be 3 or 4')
+
     _, z, y, x = np.nonzero(seg_cell)
     if proj_type == 'xz':
         coords = np.hstack([x.reshape(-1, 1), z.reshape(-1, 1)])
@@ -308,9 +309,6 @@ def execute_step(config):
                             label, fov.fov_id, e)
                 continue
 
-            # TODO: may need to change naming convention for rotation angles
-            # e.g. even if not using xy_only rotation mode
-            # might need that angle for downstream steps...
             cell_info['rotation_angle'] = angle_1
             cell_info['rotation_angle_2'] = angle_2
             cell_info['rotation_angle_3'] = angle_3
