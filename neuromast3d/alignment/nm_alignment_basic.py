@@ -296,30 +296,52 @@ def execute_step(config):
             raw_cell, seg_cell = read_raw_and_seg_img(cell.crop_raw_pre_alignment, cell.crop_seg_pre_alignment)
 
             try:
-                angle_1, angle_2, angle_3 = calculate_alignment_angles(
-                    seg_cell, 
-                    mode=settings['mode'],
-                    use_channels=settings['use_channels'],
-                    centroid_normed=cell_info['cell_centroid_normed']
-                )
-            
-            except ValueError as e:
-                print(e)
-                logger.info('For cell %s of %s, encountered error: %s',
-                            label, fov.fov_id, e)
-                continue
+                # Initialize angles at 0 because some methods only calculate 1-2 angles
+                mode = settings['mode']
+                use_channels = settings['use_channels']
+                centroid_normed = cell_info['cell_centroid_normed']
+                angle_1, angle_2, angle_3 = (0, 0, 0)
+                img_subsetted = seg_cell[(use_channels), :, :, :]
 
-            cell_info['rotation_angle'] = angle_1
-            cell_info['rotation_angle_2'] = angle_2
-            cell_info['rotation_angle_3'] = angle_3
-            cell_info['centroid'] = cell_centroid
+                if mode == 'unaligned':
+                    angle_1, angle_2, angle_3 = (0, 0, 0)
 
-            # Rotate function expects multichannel image
-            try:
+                if mode in ('xy_only', 'xy_xz', 'xy_xz_yz'):
+                    angle_1 = calculate_alignment_angle_2d(
+                            centroid_normed=centroid_normed,
+                    )
+                    seg_cell_aligned = ndi.rotate(seg_cell, -angle_1, (2, 3), reshape=True, order=0)
+                
+                if mode in ('xy_xz', 'xy_xz_yz'):
+                    angle_2 = calculate_2d_long_axis_angle_to_z_axis(
+                        img_subsetted,
+                        'xz'
+                    )
+                    seg_cell_aligned = ndi.rotate(seg_cell_aligned, angle_2, (1, 3), reshape=True, order=0)
+
+                
+                if mode == 'xy_xz_yz':
+                    angle_3 = calculate_2d_long_axis_angle_to_z_axis(
+                        img_subsetted,
+                        'yz'
+                    )
+                    seg_cell_aligned = ndi.rotate(seg_cell_aligned, angle_3, (1, 2), reshape=True, order=0)
+
+
+                if mode == 'principal_axes':
+                    angle_1, angle_2, angle_3 = rotate_image_3d(
+                        img_subsetted
+                    )
+                    seg_cell_aligned = apply_3d_rotation(seg_cell, angle_1, angle_2, angle_3)
+
                 raw_cell_aligned = apply_3d_rotation(raw_cell, angle_1, angle_2, angle_3)
-                seg_cell_aligned = apply_3d_rotation(seg_cell, angle_1, angle_2, angle_3)
 
-            except MemoryError as e:
+                cell_info['rotation_angle'] = angle_1
+                cell_info['rotation_angle_2'] = angle_2
+                cell_info['rotation_angle_3'] = angle_3
+                cell_info['centroid'] = cell_centroid
+            
+            except (MemoryError, ValueError) as e:
                 print(e)
                 logger.info('For cell %s of %s, encountered error: %s',
                             label, fov.fov_id, e)
