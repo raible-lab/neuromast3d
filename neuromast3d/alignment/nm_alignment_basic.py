@@ -212,15 +212,12 @@ def prepare_cell_and_fov_datasets(settings, step_dir):
     return cell_df, fov_df
 
 
-def calculate_alignment_angles(
-    img: np.ndarray, 
-    mode: str, 
-    use_channels: Union[int, Tuple],
-    centroid_normed: Tuple
-) -> Tuple:
-    # Initialize angles at 0 because some methods only calcualte 1-2 angles
+def align_cell_3d(seg_cell, cell_info, settings):
+    # Initialize angles at 0 because some methods only calculate 1-2 angles
+    mode = settings['mode']
+    use_channels = settings['use_channels']
+    centroid_normed = cell_info['cell_centroid_normed']
     angle_1, angle_2, angle_3 = (0, 0, 0)
-    img_subsetted = img[(use_channels), :, :, :]
 
     if mode == 'unaligned':
         angle_1, angle_2, angle_3 = (0, 0, 0)
@@ -229,25 +226,29 @@ def calculate_alignment_angles(
         angle_1 = calculate_alignment_angle_2d(
                 centroid_normed=centroid_normed,
         )
+        seg_cell_aligned = ndi.rotate(seg_cell, -angle_1, (2, 3), reshape=True, order=0)
     
     if mode in ('xy_xz', 'xy_xz_yz'):
         angle_2 = calculate_2d_long_axis_angle_to_z_axis(
-            img_subsetted,
+            seg_cell_aligned[(use_channels), :, :, :],
             'xz'
         )
-    
+        seg_cell_aligned = ndi.rotate(seg_cell_aligned, -angle_2, (1, 3), reshape=True, order=0)
+
     if mode == 'xy_xz_yz':
         angle_3 = calculate_2d_long_axis_angle_to_z_axis(
-            img_subsetted,
+            seg_cell_aligned[(use_channels), :, :, :],
             'yz'
         )
+        seg_cell_aligned = ndi.rotate(seg_cell_aligned, -angle_3, (1, 2), reshape=True, order=0)
 
     if mode == 'principal_axes':
         angle_1, angle_2, angle_3 = rotate_image_3d(
-            img_subsetted
+            seg_cell[(use_channels), :, :, :]
         )
+        seg_cell_aligned = apply_3d_rotation(seg_cell, angle_1, angle_2, angle_3)
 
-    return angle_1, angle_2, angle_3
+    return seg_cell_aligned, angle_1, angle_2, angle_3
 
 
 def execute_step(config):
@@ -293,46 +294,8 @@ def execute_step(config):
             raw_cell, seg_cell = read_raw_and_seg_img(cell.crop_raw_pre_alignment, cell.crop_seg_pre_alignment)
 
             try:
-                # Initialize angles at 0 because some methods only calculate 1-2 angles
-                mode = settings['mode']
-                use_channels = settings['use_channels']
-                centroid_normed = cell_info['cell_centroid_normed']
-                angle_1, angle_2, angle_3 = (0, 0, 0)
-                img_subsetted = seg_cell[(use_channels), :, :, :]
-
-                if mode == 'unaligned':
-                    angle_1, angle_2, angle_3 = (0, 0, 0)
-
-                if mode in ('xy_only', 'xy_xz', 'xy_xz_yz'):
-                    angle_1 = calculate_alignment_angle_2d(
-                            centroid_normed=centroid_normed,
-                    )
-                    seg_cell_aligned = ndi.rotate(seg_cell, -angle_1, (2, 3), reshape=True, order=0)
-                
-                if mode in ('xy_xz', 'xy_xz_yz'):
-                    angle_2 = calculate_2d_long_axis_angle_to_z_axis(
-                        seg_cell_aligned[(use_channels), :, :, :],
-                        'xz'
-                    )
-                    seg_cell_aligned = ndi.rotate(seg_cell_aligned, -angle_2, (1, 3), reshape=True, order=0)
-
-                
-                if mode == 'xy_xz_yz':
-                    angle_3 = calculate_2d_long_axis_angle_to_z_axis(
-                        seg_cell_aligned[(use_channels), :, :, :],
-                        'yz'
-                    )
-                    seg_cell_aligned = ndi.rotate(seg_cell_aligned, -angle_3, (1, 2), reshape=True, order=0)
-
-
-                if mode == 'principal_axes':
-                    angle_1, angle_2, angle_3 = rotate_image_3d(
-                        img_subsetted
-                    )
-                    seg_cell_aligned = apply_3d_rotation(seg_cell, angle_1, angle_2, angle_3)
-
+                seg_cell_aligned, angle_1, angle_2, angle_3 = align_cell_3d(seg_cell, cell_info, settings)
                 raw_cell_aligned = apply_3d_rotation(raw_cell, angle_1, angle_2, angle_3)
-
                 cell_info['rotation_angle'] = angle_1
                 cell_info['rotation_angle_2'] = angle_2
                 cell_info['rotation_angle_3'] = angle_3
