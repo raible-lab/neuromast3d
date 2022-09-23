@@ -88,7 +88,7 @@ def calculate_alignment_angle_2d(
     return angle
 
 
-def calculate_2d_long_axis_angle_to_z_axis(seg_cell, proj_type: str):
+def calculate_2d_long_axis_angle_to_z_axis(seg_cell, proj_type: str, make_less_than_45: bool):
     if seg_cell.ndim == 3:
         seg_cell = seg_cell[np.newaxis, :, :, :]
     elif seg_cell.ndim == 4:
@@ -105,6 +105,13 @@ def calculate_2d_long_axis_angle_to_z_axis(seg_cell, proj_type: str):
     pca = pca.fit(coords)
     eigenvecs = pca.components_
     angle = 180 * np.arctan(eigenvecs[0][0]/eigenvecs[0][1]) / np.pi
+    if make_less_than_45:
+        if -45 <= angle <= 45:
+            pass
+        elif angle < -45:
+            angle = -(90 - angle)
+        elif angle > 45:
+            angle = -(90 - angle)
     return angle
 
 
@@ -160,7 +167,8 @@ def get_alignment_settings(config) -> dict:
             'make_unique': config['alignment']['make_unique'],
             'mode': config['alignment']['mode'],
             'use_channels': config['alignment']['use_channels'],
-            'continue_from_previous': config['alignment']['continue_from_previous']
+            'continue_from_previous': config['alignment']['continue_from_previous'],
+            '45_corr': config['alignment']['45_corr']
     }
     return settings
 
@@ -215,7 +223,7 @@ def prepare_cell_and_fov_datasets(settings, step_dir):
 def align_cell_3d(seg_cell, cell_info, settings):
     # Initialize angles at 0 because some methods only calculate 1-2 angles
     mode = settings['mode']
-    use_channels = settings['use_channels']
+    use_channels = ast.literal_eval(settings['use_channels'])
     centroid_normed = cell_info['cell_centroid_normed']
     angle_1, angle_2, angle_3 = (0, 0, 0)
 
@@ -231,14 +239,16 @@ def align_cell_3d(seg_cell, cell_info, settings):
     if mode in ('xy_xz', 'xy_xz_yz'):
         angle_2 = calculate_2d_long_axis_angle_to_z_axis(
             seg_cell_aligned[(use_channels), :, :, :],
-            'xz'
+            'xz',
+            settings['45_corr']
         )
         seg_cell_aligned = ndi.rotate(seg_cell_aligned, -angle_2, (1, 3), reshape=True, order=0)
 
     if mode == 'xy_xz_yz':
         angle_3 = calculate_2d_long_axis_angle_to_z_axis(
             seg_cell_aligned[(use_channels), :, :, :],
-            'yz'
+            'yz',
+            settings['45_corr']
         )
         seg_cell_aligned = ndi.rotate(seg_cell_aligned, -angle_3, (1, 2), reshape=True, order=0)
 

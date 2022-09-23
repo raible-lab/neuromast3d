@@ -15,7 +15,7 @@ channels:
 
 # Directory in which to save results
 # Individual steps will create their own subdirs to save within this
-project_dir: '/home/maddy/projects/claudin_gfp_sfrp_nlsEos_DRAQ5_airy_live_2/cvapipe_run_sfrp_1'
+project_dir: '/home/maddy/projects/claudin_gfp_sfrp_nlsEos_DRAQ5_airy_live_2/cvapipe_run_sfrp_test_1'
 
 # Directory containing raw images
 raw_dir: '/home/maddy/projects/claudin_gfp_sfrp_nlsEos_DRAQ5_airy_live_2/stack_aligned'
@@ -76,4 +76,6 @@ alignment:
         # see README for details
         mode: 'xy_xz_yz'
         # channels to use to calculate tilt correction angle(s)
-        use_channels: (0, 1)
+        use_channels: '(0, 1)'
+        # use >45 degree angle correction
+        45_corr: False
