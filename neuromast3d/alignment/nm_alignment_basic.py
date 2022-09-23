@@ -105,9 +105,6 @@ def calculate_2d_long_axis_angle_to_z_axis(seg_cell, proj_type: str):
     pca = pca.fit(coords)
     eigenvecs = pca.components_
     angle = 180 * np.arctan(eigenvecs[0][0]/eigenvecs[0][1]) / np.pi
-    # Angle needs to be negative for downstream steps to work, I think
-    # (not entirely sure why, probably a coord system thing)
-    angle = -angle
     return angle
 
 
@@ -317,7 +314,7 @@ def execute_step(config):
                         seg_cell_aligned[(use_channels), :, :, :],
                         'xz'
                     )
-                    seg_cell_aligned = ndi.rotate(seg_cell_aligned, angle_2, (1, 3), reshape=True, order=0)
+                    seg_cell_aligned = ndi.rotate(seg_cell_aligned, -angle_2, (1, 3), reshape=True, order=0)
 
                 
                 if mode == 'xy_xz_yz':
@@ -325,7 +322,7 @@ def execute_step(config):
                         seg_cell_aligned[(use_channels), :, :, :],
                         'yz'
                     )
-                    seg_cell_aligned = ndi.rotate(seg_cell_aligned, angle_3, (1, 2), reshape=True, order=0)
+                    seg_cell_aligned = ndi.rotate(seg_cell_aligned, -angle_3, (1, 2), reshape=True, order=0)
 
 
                 if mode == 'principal_axes':
