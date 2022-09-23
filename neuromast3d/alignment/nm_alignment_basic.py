@@ -314,7 +314,7 @@ def execute_step(config):
                 
                 if mode in ('xy_xz', 'xy_xz_yz'):
                     angle_2 = calculate_2d_long_axis_angle_to_z_axis(
-                        img_subsetted,
+                        seg_cell_aligned[(use_channels), :, :, :],
                         'xz'
                     )
                     seg_cell_aligned = ndi.rotate(seg_cell_aligned, angle_2, (1, 3), reshape=True, order=0)
@@ -322,7 +322,7 @@ def execute_step(config):
                 
                 if mode == 'xy_xz_yz':
                     angle_3 = calculate_2d_long_axis_angle_to_z_axis(
-                        img_subsetted,
+                        seg_cell_aligned[(use_channels), :, :, :],
                         'yz'
                     )
                     seg_cell_aligned = ndi.rotate(seg_cell_aligned, angle_3, (1, 2), reshape=True, order=0)
