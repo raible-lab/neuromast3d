@@ -88,6 +88,20 @@ def calculate_alignment_angle_2d(
     return angle
 
 
+def apply_45_degree_correction(angle):
+    '''
+    if abs(angle) > 90:
+        raise ValueError(f'Angle must be between 90 and -90, actual angle is {angle}')
+    '''
+    if -45 <= angle <= 45:
+        pass
+    elif angle < -45:
+        angle = -(-90 - angle)
+    elif angle > 45:
+        angle = -(90 - angle)
+    return angle
+
+
 def calculate_2d_long_axis_angle_to_z_axis(seg_cell, proj_type: str, make_less_than_45: bool):
     if seg_cell.ndim == 3:
         seg_cell = seg_cell[np.newaxis, :, :, :]
@@ -105,13 +119,9 @@ def calculate_2d_long_axis_angle_to_z_axis(seg_cell, proj_type: str, make_less_t
     pca = pca.fit(coords)
     eigenvecs = pca.components_
     angle = 180 * np.arctan(eigenvecs[0][0]/eigenvecs[0][1]) / np.pi
+
     if make_less_than_45:
-        if -45 <= angle <= 45:
-            pass
-        elif angle < -45:
-            angle = -(90 - angle)
-        elif angle > 45:
-            angle = -(90 - angle)
+        angle = apply_45_degree_correction(angle)
     return angle
 
 
