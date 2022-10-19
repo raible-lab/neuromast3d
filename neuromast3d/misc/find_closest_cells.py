@@ -55,7 +55,7 @@ class RepresentativeCellFinder(KDTree):
         repr_cells = []
         for cluster in np.unique(self.cluster_labels):
             cluster = int(cluster)
-            dists, inds = self.find_cells_near_cluster_centroid(self.cluster_labels, cluster, k)
+            dists, inds = self.find_cells_near_cluster_centroid(cluster, k)
             if k == 1:
                 repr_cells.append({'cluster': cluster, 'k': k, 'dists': dists, 'inds': inds})
 
