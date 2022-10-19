@@ -34,13 +34,37 @@ class RepresentativeCellFinder(KDTree):
             inds.append(ind)
         return dists, inds
 
-    def find_cells_near_cluster_centroid(self, cluster_labels: np.ndarray, cluster: int, k: int):
-        cluster_labels = cluster_labels[:, np.newaxis]
+    def find_cluster_centroids(self, cluster_labels: np.ndarray):
+        self.cluster_labels = cluster_labels
+        cluster_labels = self.cluster_labels[:, np.newaxis]
         clustered_data = np.concatenate((self.data, cluster_labels), axis=1)
-        subset = clustered_data[clustered_data[:, -1] == cluster]
-        cluster_mean = np.mean(subset[:, :-1], axis=0)
+        cluster_means = {}
+        for cluster in np.unique(cluster_labels):
+            subset = clustered_data[clustered_data[:, -1] == cluster]
+            cluster_mean = np.mean(subset[:, :-1], axis=0)
+            cluster_means[cluster] = cluster_mean
+        self.cluster_means = cluster_means
+        return cluster_means
+
+    def find_cells_near_cluster_centroid(self, cluster: int, k: int):
+        cluster_mean = self.cluster_means[cluster]
         dists, inds = self.query(cluster_mean, k)
         return dists, inds
+
+    def find_cells_near_all_cluster_centroids(self, k):
+        repr_cells = []
+        for cluster in np.unique(self.cluster_labels):
+            cluster = int(cluster)
+            dists, inds = self.find_cells_near_cluster_centroid(self.cluster_labels, cluster, k)
+            if k == 1:
+                repr_cells.append({'cluster': cluster, 'k': k, 'dists': dists, 'inds': inds})
+
+            else:
+                for k_val in range(k):
+                    repr_cells.append({'cluster': cluster, 'k': k_val, 'dists': dists[k_val], 'inds': inds[k_val]})
+
+        return repr_cells
+
 
 
 def main():
