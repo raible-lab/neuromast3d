@@ -57,9 +57,11 @@ class RepresentativeCellFinder(KDTree):
             cluster = int(cluster)
             dists, inds = self.find_cells_near_cluster_centroid(cluster, k)
             if k == 1:
-                repr_cells.append({'cluster': cluster, 'k': k, 'dists': dists, 'inds': inds})
+                # Only looking for the closest cell
+                repr_cells.append({'cluster': cluster, 'k': 0, 'dists': dists, 'inds': inds})
 
             else:
+                # Looking for k closest cells
                 for k_val in range(k):
                     repr_cells.append({'cluster': cluster, 'k': k_val, 'dists': dists[k_val], 'inds': inds[k_val]})
 
