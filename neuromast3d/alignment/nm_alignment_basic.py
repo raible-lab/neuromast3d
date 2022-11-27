@@ -250,7 +250,7 @@ def align_cell_3d(seg_cell, cell_info, settings):
         angle_2 = calculate_2d_long_axis_angle_to_z_axis(
             seg_cell_aligned[(use_channels), :, :, :],
             'xz',
-            settings['45_corr']
+            False
         )
         seg_cell_aligned = ndi.rotate(seg_cell_aligned, -angle_2, (1, 3), reshape=True, order=0)
 

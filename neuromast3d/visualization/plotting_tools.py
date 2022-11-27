@@ -104,30 +104,27 @@ def subcluster(df, cluster, cluster_col_name='cluster', alias='NUC_MEM'):
     return embedding_df_subset, graph
 
 
-def combine_features_datasets(project_dirs: list, local_staging=True):
+def combine_features_datasets(project_dirs: list):
     df = pd.DataFrame()
     for count, directory in enumerate(project_dirs):
-        if local_staging:
-            features_data = get_features_data(directory / 'local_staging')
-        else:
-            features_data = get_features_data(directory)
+        features_data = get_features_data(directory)
         features_data['batch'] = count + 1
         df = pd.concat([df, features_data])
     return df
 
 
-def fit_pca_to_subset(df, subset_col: str, subset_vals: list, alias: str = 'NUC_MEM'):
+def fit_pca_to_subset(df, subset_col: str, subset_vals: list, alias: str = 'NUC_MEM', n_comps: Union[float, int] = 0.90):
     df_subset = df.loc[df[subset_col].isin(subset_vals)]
-    shcoeffs_matrix = get_matrix_of_shcoeffs_for_pca(df_subset, alias)
+    shcoeffs_matrix, _  = get_matrix_of_shcoeffs_for_pca(df_subset, alias)
 
     # fit pca to subset
-    pca = PCA(n_components=0.90)
+    pca = PCA(n_components=n_comps)
     pca.fit(shcoeffs_matrix)
     return pca
 
 
 def apply_pca_transform(df, pca, alias: str = 'NUC_MEM'):
-    shcoeffs_matrix = get_matrix_of_shcoeffs_for_pca(df, alias)
+    shcoeffs_matrix, _ = get_matrix_of_shcoeffs_for_pca(df, alias)
     axes = pca.transform(shcoeffs_matrix)
     p = alias
     columns = [f'{p}_PC{s}' for s in range(1, 1 + pca.n_components_)]
@@ -232,3 +229,79 @@ def color_code_fov_images_by_feature(cell_dataset, feature_col, save):
             save_dir = Path(project_dirs[0] / f'fovs_colored_by{feature}')
             save_dir.mkdir(parents=True, exist_ok=True)
             imsave(save_dir / f'{fov.fov_id}.tiff', merged_image)
+
+
+def circular_hist(ax, x, bins=16, density=True, offset=0, gaps=True):
+    """
+    Produce a circular histogram of angles on ax.
+
+    Parameters
+    ----------
+    ax : matplotlib.axes._subplots.PolarAxesSubplot
+        axis instance created with subplot_kw=dict(projection='polar').
+
+    x : array
+        Angles to plot, expected in units of radians.
+
+    bins : int, optional
+        Defines the number of equal-width bins in the range. The default is 16.
+
+    density : bool, optional
+        If True plot frequency proportional to area. If False plot frequency
+        proportional to radius. The default is True.
+
+    offset : float, optional
+        Sets the offset for the location of the 0 direction in units of
+        radians. The default is 0.
+
+    gaps : bool, optional
+        Whether to allow gaps between bins. When gaps = False the bins are
+        forced to partition the entire [-pi, pi] range. The default is True.
+
+    Returns
+    -------
+    n : array or list of arrays
+        The number of values in each bin.
+
+    bins : array
+        The edges of the bins.
+
+    patches : `.BarContainer` or list of a single `.Polygon`
+        Container of individual artists used to create the histogram
+        or list of such containers if there are multiple input datasets.
+    """
+    # Wrap angles to [-pi, pi)
+    x = (x+np.pi) % (2*np.pi) - np.pi
+
+    # Force bins to partition entire circle
+    if not gaps:
+        bins = np.linspace(-np.pi, np.pi, num=bins+1)
+
+    # Bin data and record counts
+    n, bins = np.histogram(x, bins=bins)
+
+    # Compute width of each bin
+    widths = np.diff(bins)
+
+    # By default plot frequency proportional to area
+    if density:
+        # Area to assign each bin
+        area = n / x.size
+        # Calculate corresponding bin radius
+        radius = (area/np.pi) ** .5
+    # Otherwise plot frequency proportional to radius
+    else:
+        radius = n
+
+    # Plot data on ax
+    patches = ax.bar(bins[:-1], radius, zorder=1, align='edge', width=widths,
+                     edgecolor='C0', fill=False, linewidth=1)
+
+    # Set the direction of the zero angle
+    ax.set_theta_offset(offset)
+
+    # Remove ylabels for area plots (they are mostly obstructive)
+    if density:
+        ax.set_yticks([])
+
+    return n, bins, patches
