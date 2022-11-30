@@ -102,7 +102,7 @@ def apply_45_degree_correction(angle):
     return angle
 
 
-def calculate_2d_long_axis_angle_to_z_axis(seg_cell, proj_type: str, make_less_than_45: bool):
+def calculate_2d_long_axis_angle_to_z_axis(seg_cell, proj_type: str, make_less_than_45: bool = False):
     if seg_cell.ndim == 3:
         seg_cell = seg_cell[np.newaxis, :, :, :]
     elif seg_cell.ndim == 4:

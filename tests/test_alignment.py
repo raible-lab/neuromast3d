@@ -10,7 +10,7 @@ from skimage.draw import ellipsoid
 from skimage.transform import rotate
 
 from neuromast3d.alignment.utils import find_major_axis_by_pca, rotate_image_2d_custom
-from neuromast3d.alignment.nm_alignment_basic import align_cell_xz_long_axis_to_z_axis, calculate_2d_long_axis_angle_to_z_axis, calculate_alignment_angle_2d, calculate_alignment_angles, normalize_centroid
+from neuromast3d.alignment.nm_alignment_basic import align_cell_3d, align_cell_xz_long_axis_to_z_axis, apply_45_degree_correction, calculate_2d_long_axis_angle_to_z_axis, calculate_alignment_angle_2d, normalize_centroid
 from neuromast3d.prep_single_cells.prep_single_cells import create_cropping_roi, crop_to_roi
 
 
@@ -138,12 +138,12 @@ def test_align_cell_xz_long_axis_to_z_axis_rot_ellip(rotated_ellipsoid):
 
 @pytest.mark.parametrize(
     'init_angle, expected_angle, axes, proj_type', [
-        (0, -90, (0,2), 'xz'),
-        (15, 75, (0,2), 'xz'),
-        (45, 45, (0,2), 'xz'),
+        (0, 90, (0,2), 'xz'),
+        (15, -75, (0,2), 'xz'),
+        (45, -45, (0,2), 'xz'),
         (90, 0, (0,2), 'xz'),
-        (-15, -75, (0,2), 'xz'),
-        (15, 75, (0,1), 'yz')
+        (-15, 75, (0,2), 'xz'),
+        (15, -75, (0,1), 'yz')
     ]
 )
 def test_calculate_2d_long_axis_angle_to_z_axis(orig_ellipsoid, init_angle, expected_angle, axes, proj_type):
@@ -160,9 +160,27 @@ def test_calculate_2d_long_axis_angle_to_z_axis(orig_ellipsoid, init_angle, expe
         ('xy_only', (0, 0, 0), (-45, 0, 0))
     ]
 )
-def test_calculate_alignment_angles(rotated_ellipsoid, mode, origin, expected):
+def test_align_cell_3d(rotated_ellipsoid, mode, origin, expected):
     _, _, ellip_rot3 = rotated_ellipsoid
     centroid_normed = normalize_centroid(ellip_rot3, origin)
     ellip_rot3 = ellip_rot3[np.newaxis, :, :, :]
-    angles = calculate_alignment_angles(img=ellip_rot3, mode=mode, use_channels=0, centroid_normed=centroid_normed)
+    cell_info = {'cell_centroid_normed': centroid_normed}
+    settings = {'use_channels': '0', '45_corr': False, 'mode': mode}
+    _, angle_1, angle_2, angle_3 = align_cell_3d(ellip_rot3, cell_info, settings)
+    angles = (angle_1, angle_2, angle_3)
     np.testing.assert_allclose(angles, expected, rtol=1e-02, atol=5)
+
+
+@pytest.mark.parametrize(
+    'angle, expected', [
+        (75, -15),
+        (-75, 15),
+        (-15, -15),
+        (15, 15),
+        (0, 0),
+        (90, 0)
+    ]
+)
+def test_apply_45_degree_correction(angle, expected):
+    actual = apply_45_degree_correction(angle)
+    assert actual == expected
