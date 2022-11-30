@@ -143,10 +143,12 @@ def create_fov_dataframe_from_cell_dataframe(cell_df):
     fov_df = cell_df.copy()
     fov_df.drop_duplicates(subset=['fov_id'], keep='first', inplace=True)
     fov_df.drop(
-        ['CellId', 'crop_raw_pre_alignment', 'crop_seg_pre_alignment', 'roi'],
+        ['crop_raw_pre_alignment', 'crop_seg_pre_alignment', 'roi'],
         axis=1,
         inplace=True
     )
+    # index of cell dataframe is usually CellId, which we don't need
+    fov_df = fov_df.reset_index(drop=True)
     return fov_df
 
 
@@ -204,7 +206,7 @@ def prepare_fov(fov, settings, cell_df):
 
 
 def prepare_cell_and_fov_datasets(settings, step_dir):
-    cell_df = pd.read_csv(settings['path_to_manifest'], index_col=0)
+    cell_df = pd.read_csv(settings['path_to_manifest'], index_col='CellId')
 
     # Since we are applying alignment, rename old crop_seg and crop_raw
     # Because we want to use the aligned images in future steps
@@ -217,7 +219,7 @@ def prepare_cell_and_fov_datasets(settings, step_dir):
     if settings['continue_from_previous']:
         # In the event a previous run was aborted, e.g. due to no disk space
         # Recreate the cell_df as if we were mid run
-        done_fovs = pd.read_csv(step_dir / 'manifest.csv')
+        done_fovs = pd.read_csv(step_dir / 'manifest.csv', index_col='CellId')
         # Save old manifest in case I screwed up (can remove once I am sure it works properly)
         done_fovs.to_csv(step_dir / 'old_manifest.csv')
         not_done_fovs = cell_df[~cell_df['fov_id'].isin(done_fovs['fov_id_x'])]
