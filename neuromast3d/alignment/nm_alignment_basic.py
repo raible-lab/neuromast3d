@@ -342,7 +342,13 @@ def execute_step(config):
 
         # Save angles to cell manifest
         angle_df = pd.DataFrame(cell_angles)
-        new_cell_df = cell_df.merge(angle_df, on='CellId')
+        if settings['continue_from_previous']:
+            # columns exist but need to be filled for undone fovs
+            # bit of a hack but should be ok for now
+            # better solution would likely require a bigger rewrite...
+            new_cell_df = cell_df.fillna(angle_df)
+        else:
+            new_cell_df = cell_df.merge(angle_df, on='CellId')
         new_cell_df.to_csv(f'{step_dir}/manifest.csv')
         print('Manifest saved.')
 
