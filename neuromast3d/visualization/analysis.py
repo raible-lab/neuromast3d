@@ -13,6 +13,7 @@ import argparse
 import ast
 import logging
 from pathlib import Path
+import sys
 from typing import Optional, Union
 
 from aicsimageio import AICSImage
@@ -38,6 +39,9 @@ from neuromast3d.misc.find_closest_cells import RepresentativeCellFinder
 from neuromast3d.visualization import plotting_tools
 
 
+# Set up logger
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
 
 
 def get_mesh_from_dict(row: dict, alias: str, lmax: int):
@@ -309,6 +313,7 @@ def plot_intensity_umap(adata, ch_name, int_col):
 
 
 def main():
+
     # Take inputs here
     parser = argparse.ArgumentParser()
     parser.add_argument('--project_dirs', type=str, nargs='+')
@@ -328,6 +333,21 @@ def main():
     pca_alias = args.pca_alias
     resolution = args.resolution
     remove_bad_recs = args.remove_bad_recs
+
+    # Set up logging - file handler
+    f_handler = logging.FileHandler(f'{output_dir}/analysis.log', mode='w')
+    formatter = logging.Formatter("%(name)s %(asctime)s %(levelname)s %(message)s")
+    f_handler.setLevel(logging.INFO)
+    f_handler.setFormatter(formatter)
+    logger.addHandler(f_handler)
+
+    # Set stream handler
+    s_handler = logging.StreamHandler()
+    s_handler.setLevel(logging.DEBUG)
+    s_handler.setFormatter(formatter)
+    logger.addHandler(s_handler)
+
+    logger.info(sys.argv)
 
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -366,7 +386,7 @@ def main():
     adata.var_names = feature_names
 
     if remove_bad_recs:
-        print('removing bad recs')
+        logger.info('removing bad recs')
         for proj_dir in project_dirs:
             rec_errors = pd.read_csv(proj_dir / f'rec_errors_{pca_alias}.csv', index_col='CellId')
             rec_errors = rec_errors[rec_errors.index.isin(adata.obs_names)]
@@ -378,17 +398,15 @@ def main():
             sns.kdeplot(adata.obsm['rec_error'], x='max_hd', hue='gmm_classes')
             plt.tight_layout()
             plt.savefig(output_dir / 'rec_error_gmm_split.png')
-            print(adata.obsm['rec_error']['gmm_classes'])
 
             adata = adata[adata.obsm['rec_error']['gmm_classes'] == 0]
             df = df.loc[adata.obs_names]
-            print(adata.obs_names)
 
     adata, pca, axes = run_custom_pca(df, adata, 'batch', pca_batches, pca_alias, 0.90)
-    print(f'PCA done on batches {pca_batches}')
+    logger.info(f'PCA done on batches {pca_batches}')
 
     num_pcs = len(axes.columns)
-    print(f'Number of PCs is: {num_pcs}')
+    logger.info(f'Number of PCs is: {num_pcs}')
 
     # Cluster, find neighbors, and UMAP embedding
     external.tl.phenograph(adata, clustering_algo='leiden', k=30, resolution_parameter=resolution, seed=42)
@@ -478,7 +496,7 @@ def main():
         adata.obsm['other_features'] = plotting_tools.add_intensity_z_score_col(adata.obsm['other_features'], intensity_col, suffix=key)
         adata.obsm['other_features'][f'{key}_positive'] = np.where(adata.obsm['other_features'][f'{intensity_col}_z_score'] > 1, 1, 0)
         plot_intensity_umap(adata, key, value)
-        plt.savefig(f'{key}_intensity_umap.png', dpi=300)
+        plt.savefig(output_dir / f'{key}_intensity_umap.png', dpi=300)
 
 
     # Fix columns that prevent saving

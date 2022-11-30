@@ -4,6 +4,7 @@
 """ Utility functions for data visualization and plot generation """
 
 import ast
+import logging
 from pathlib import Path
 from typing import Union
 
@@ -17,6 +18,9 @@ import seaborn as sns
 from sklearn.decomposition import PCA
 from tifffile import imread, imsave
 import umap
+
+
+logger = logging.getLogger(__name__)
 
 
 def generate_pca_df_from_shcoeffs(features_df, alias='NUC_MEM'):
