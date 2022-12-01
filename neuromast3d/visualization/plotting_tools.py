@@ -38,7 +38,7 @@ def get_matrix_of_shcoeffs_for_pca(df, alias):
     elif alias == 'MEM':
         prefixes = ['MEM_shcoeffs_L']
     else:
-        print('No valid alias provided. Options: NUC, MEM, or NUC_MEM')
+        logger.warning('No valid alias provided. Options: NUC, MEM, or NUC_MEM')
     features_to_use = [feat for feat in df.columns if any(word in feat for word in prefixes)]
     df_shcoeffs = df[features_to_use]
     matrix_of_features = df_shcoeffs.values.copy()

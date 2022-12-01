@@ -322,7 +322,7 @@ def main():
     parser.add_argument('--pca_batches', type=int, nargs='+')
     parser.add_argument('--pca_alias', type=str)
     parser.add_argument('--resolution', type=float)
-    parser.add_argument('--remove_bad_recs', action='store_true')
+    parser.add_argument('--classify_rec_error', action='store_true')
 
     args = parser.parse_args()
 
@@ -332,7 +332,7 @@ def main():
     pca_batches = args.pca_batches
     pca_alias = args.pca_alias
     resolution = args.resolution
-    remove_bad_recs = args.remove_bad_recs
+    classify_rec_error = args.classify_rec_error
 
     # Set up logging - file handler
     f_handler = logging.FileHandler(f'{output_dir}/analysis.log', mode='w')
@@ -356,7 +356,7 @@ def main():
 
     if len(project_dirs) > 1:
         # Automatically combine experiments
-        df = plotting_tools.combine_features_datasets(project_dirs, local_staging=False)
+        df = plotting_tools.combine_features_datasets(project_dirs)
         curated_df = pd.DataFrame()
         for path in paths_to_curation_csvs:
             curated_df_new = pd.read_csv(path)
@@ -385,22 +385,23 @@ def main():
     adata.obs_names = df.index
     adata.var_names = feature_names
 
-    if remove_bad_recs:
-        logger.info('removing bad recs')
+    if classify_rec_error:
+        logger.info('classifying cells by rec error')
+        rec_errors = pd.DataFrame()
         for proj_dir in project_dirs:
-            rec_errors = pd.read_csv(proj_dir / f'rec_errors_{pca_alias}.csv', index_col='CellId')
-            rec_errors = rec_errors[rec_errors.index.isin(adata.obs_names)]
-            adata.obsm['rec_error'] = rec_errors
-            # Consider moving this to the error analysis script
-            gm_model = GaussianMixture(n_components=2, covariance_type='tied')
-            gm_model.fit(rec_errors['max_hd'].values.reshape(-1, 1))
-            adata.obsm['rec_error']['gmm_classes'] = gm_model.predict(rec_errors['max_hd'].values.reshape(-1, 1))
-            sns.kdeplot(adata.obsm['rec_error'], x='max_hd', hue='gmm_classes')
-            plt.tight_layout()
-            plt.savefig(output_dir / 'rec_error_gmm_split.png')
-
-            adata = adata[adata.obsm['rec_error']['gmm_classes'] == 0]
-            df = df.loc[adata.obs_names]
+            rec_error = pd.read_csv(proj_dir / f'rec_errors_{pca_alias}.csv', index_col='CellId')
+            rec_error = rec_error[rec_error.index.isin(adata.obs_names)]
+            rec_errors = pd.concat([rec_errors, rec_error])
+            logger.debug(f'{rec_errors.shape}')
+        logger.debug(f'{adata.X.shape}')
+        adata.obsm['rec_error'] = rec_errors
+        # Consider moving this to the error analysis script
+        gm_model = GaussianMixture(n_components=2, covariance_type='tied')
+        gm_model.fit(rec_errors['max_hd'].values.reshape(-1, 1))
+        adata.obsm['rec_error']['gmm_classes'] = gm_model.predict(rec_errors['max_hd'].values.reshape(-1, 1))
+        sns.kdeplot(adata.obsm['rec_error'], x='max_hd', hue='gmm_classes')
+        plt.tight_layout()
+        plt.savefig(output_dir / 'rec_error_gmm_split.png')
 
     adata, pca, axes = run_custom_pca(df, adata, 'batch', pca_batches, pca_alias, 0.90)
     logger.info(f'PCA done on batches {pca_batches}')
