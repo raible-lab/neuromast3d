@@ -6,13 +6,18 @@
 import ast
 import logging
 from pathlib import Path
-from typing import Union
+from typing import Optional, Union
 
+from aicsimageio import AICSImage
+from aicsshparam import shtools
 import matplotlib
 from matplotlib import pyplot as plt
+from matplotlib.colors import ListedColormap
 import napari
 import numpy as np
 import pandas as pd
+from sklearn.mixture import GaussianMixture
+import yaml
 import phenograph
 import seaborn as sns
 from sklearn.decomposition import PCA
@@ -189,6 +194,7 @@ def get_list_of_intensity_features(alias: str):
 # will have to think about adding those, + any other engineered features
 
 def color_code_fov_images_by_feature(cell_dataset, feature_col, save):
+    # TODO: this is bugged if the feature you are coloring by uses integers...
     fov_dataset = cell_dataset.drop_duplicates(subset='fov_id', keep='first')
     for fov in fov_dataset.itertuples():
         raw_img = imread(fov.fov_path)
@@ -309,3 +315,301 @@ def circular_hist(ax, x, bins=16, density=True, offset=0, gaps=True):
         ax.set_yticks([])
 
     return n, bins, patches
+
+
+def get_mesh_from_dict(row: dict, alias: str, lmax: int):
+    cos_coeffs = np.zeros((1, lmax, lmax), dtype=np.float32)
+    sin_coeffs = np.zeros((1, lmax, lmax), dtype=np.float32)
+    for l in range(lmax):
+        for m in range(l + 1):
+            try:
+                cos_coeffs[0, l, m] = row[f'{alias}_shcoeffs_L{l}M{m}C_lcc']
+                sin_coeffs[0, l, m] = row[f'{alias}_shcoeffs_L{l}M{m}S_lcc']
+            except ValueError:
+                pass
+    coeffs = np.concatenate((cos_coeffs, sin_coeffs), axis=0)
+    mesh, grid = shtools.get_reconstruction_from_coeffs(coeffs)
+    return coeffs, mesh, grid
+
+
+def reconstruct_mesh_from_shcoeffs_array(
+    shcoeffs_vals: np.ndarray,
+    shcoeffs_names: pd.Index,
+    alias: str,
+    lmax: int,
+    save_path: Optional[str] = None
+):
+    row_dict = {index: shcoeffs_vals[count] for count, index in enumerate(shcoeffs_names)}
+    coeffs, mesh, grid = get_mesh_from_dict(row_dict, alias, lmax)
+    if save_path is not None:
+        shtools.save_polydata(mesh, save_path)
+    return coeffs, mesh, grid
+
+
+
+def reconstruct_pc_meshes(adata, pca_model, alias: str, num_pcs: int, sd_bins: list, output_dir):
+    pc_means = adata.obsm['X_pca'].mean(axis=0)
+    pc_sds = adata.obsm['X_pca'].std(axis=0)
+    for pc in range(num_pcs + 1):
+        for n_sd in sd_bins:
+            means_tweaked = pc_means.copy()
+            means_tweaked[pc] = pc_means[pc] + (n_sd * pc_sds[pc])
+            shcoeffs = np.array(pca_model.inverse_transform(means_tweaked))
+            mesh_dir = Path(output_dir / 'PC_mesh_representations')
+            mesh_dir.mkdir(parents=True, exist_ok=True)
+            save_path = f'{mesh_dir}/{pc}_{n_sd}_mesh.vtk'
+            reconstruct_mesh_from_shcoeffs_array(shcoeffs, adata.var_names, alias, 32, save_path)
+    return
+
+
+def run_custom_pca(
+    df,
+    adata,
+    subset_col: str,
+    subset_vals: list,
+    alias: str,
+    n_comps: Union[float, int],
+    zero_center: Optional[bool] = True,
+    use_highly_variable: Optional[bool] = None,
+):
+    # Fit PCA to subset of data, apply transform to rest, then add to adata object
+    # Modified from original scanpy function
+    pca_ = fit_pca_to_subset(df, subset_col, subset_vals, alias, n_comps)
+    axes = apply_pca_transform(df, pca_, alias=alias)
+    X_pca = axes.values
+    adata.obsm['X_pca'] = X_pca
+    adata.uns['pca'] = {}
+    adata.uns['pca']['params'] = {
+        'zero_center': zero_center,
+        'use_highly_variable': use_highly_variable,
+    }
+
+    if use_highly_variable:
+        adata.varm['PCs'] = np.zeros(shape=(adata.n_vars, n_comps))
+        adata.varm['PCs'][adata.var['highly_variable']] = pca_.components_.T
+
+    else:
+        adata.varm['PCs'] = pca_.components_.T
+
+    adata.uns['pca']['variance'] = pca_.explained_variance_
+    adata.uns['pca']['variance_ratio'] = pca_.explained_variance_ratio_
+
+    return adata, pca_, axes
+
+
+def get_cluster_percents_by_genotype(
+    df_clustered: pd.DataFrame,
+    cluster_name: str,
+    order: Optional[list] = None
+):
+    cluster_percents = pd.DataFrame()
+    for gt in np.unique([df_clustered['genotype'].values]):
+        clust_percents = df_clustered.loc[df_clustered['genotype'] == gt][cluster_name].value_counts(normalize=True)
+        clust_percents = pd.DataFrame(clust_percents)
+        clust_percents['genotype'] = gt
+        cluster_percents = pd.concat([cluster_percents, clust_percents])
+    cluster_percents['percent_per_cluster'] = cluster_percents[cluster_name]
+    cluster_percents = cluster_percents.drop(cluster_name, axis=1)
+    cluster_percents[cluster_name] = cluster_percents.index
+    if order is not None:
+        cluster_percents['genotype'] = pd.Categorical(cluster_percents['genotype'], order)
+        cluster_percents.sort_values(by='genotype')
+    return cluster_percents
+
+
+def add_distances_to_dataframe(df):
+    df_merged = df.copy()
+    # Calculate cell centroid dist
+    df_merged['nm_centroid'] = df_merged['nm_centroid'].apply(ast.literal_eval)
+    df_merged['cell_centroid'] = df_merged['centroid'].apply(ast.literal_eval)
+
+    # Is this the true distance? Or do I need to square/square root it...
+    dist = df_merged['cell_centroid'].apply(np.array) - df_merged['nm_centroid'].apply(np.array)
+
+    # Separate 3 coordinates into separate columns
+    df_merged['z_dist'], df_merged['y_dist'], df_merged['x_dist'] = zip(*dist)
+
+    # Invert sign of y to convert from rc coords to xy coords'
+    df_merged['y_dist'] = -df_merged['y_dist']
+
+    # Drop z to only calculate xy dist
+    xy_dist = df_merged[['y_dist', 'x_dist']].values.tolist()
+    df_merged['raw_xy_dist_from_center'] = [np.linalg.norm(row) for row in xy_dist]
+
+    # Convert rotation angle to rads for plotting
+    df_merged['rotation_angle_in_rads'] = df_merged['rotation_angle']*np.pi/180
+
+    # Will need to check this is right later, just doing it quickly for now
+    # DV should be counterclockwise rotated by 90 degrees
+    df_merged['corrected_rotation_angle'] = df_merged['rotation_angle']
+    df_merged.loc[df_merged['polairty'] == 'DV', 'corrected_rotation_angle'] = df_merged['rotation_angle'] + 90
+
+    df_merged['corrected_rotation_angle_in_rads'] = df_merged['corrected_rotation_angle']*np.pi/180
+
+    # Normalize to centroid of cell furthest from the neuromast center
+    groups = df_merged.groupby(['fov_id'])
+    max_vals = groups.transform('max')
+    df_merged['normalized_xy_dist_from_center'] = df_merged['raw_xy_dist_from_center'] / max_vals['raw_xy_dist_from_center']
+    return df_merged
+
+
+def convert_seaborn_cmap_to_mpl(sns_cmap):
+    mpl_cmap = ListedColormap(sns.color_palette(sns_cmap).as_hex())
+    return mpl_cmap
+
+
+def plot_clusters_polar(df, col_name: str, cmap):
+    clust_groups = df.groupby(col_name)
+    fig, axs = plt.subplots(ncols=len(clust_groups), figsize=(20, 8), subplot_kw={'projection': 'polar'}, sharey=True)
+    for name, group in clust_groups:
+        # this assumes clusters are integers from 0 to n clusters
+        axs[name].plot(
+                group['corrected_rotation_angle_in_rads'].values,
+                group['normalized_xy_dist_from_center'].values,
+                '.',
+                color=cmap(name)
+            )
+    plt.tight_layout()
+    return axs
+
+
+def plot_pca_var_explained(adata, ax):
+    ax[0].plot(adata.uns['pca']['variance_ratio'])
+    ax[0].set_xlabel('Number of principal components')
+    ax[0].set_ylabel('Variance explained')
+    ax[1].plot(np.cumsum(adata.uns['pca']['variance_ratio']))
+    ax[1].set_xlabel('Number of PCs')
+    ax[1].set_ylabel('Cumulative variance explained')
+    ax[0].set_xticks(np.arange(0, adata.obsm['X_pca'].shape[1]+1, 10))
+    ax[1].set_xticks(np.arange(0, adata.obsm['X_pca'].shape[1]+1, 10))
+    return ax
+
+
+def plot_repr_cells_umap(adata, col_name, ax):
+    UMAP_1 = adata.obsm['X_umap'][:, 0]
+    UMAP_2 = adata.obsm['X_umap'][:, 1]
+
+    g = sns.scatterplot(x=UMAP_1, y=UMAP_2, hue=adata.obs[col_name], palette='deep')
+    repr_cells_df = adata.uns['repr_cells']
+    plt.scatter(UMAP_1[repr_cells_df['inds']], UMAP_2[repr_cells_df['inds']], s=70, color='black', edgecolors='white')
+    plt.legend(title='cluster', bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=0)
+    g.set_xlabel('UMAP 1')
+    g.set_ylabel('UMAP 2')
+    return ax
+
+
+def plot_batch_umap(adata, ax):
+    UMAP_1 = adata.obsm['X_umap'][:, 0]
+    UMAP_2 = adata.obsm['X_umap'][:, 1]
+
+    g = sns.scatterplot(x=UMAP_1, y=UMAP_2, hue=adata.obsm['other_features']['batch'], palette='deep')
+    plt.legend(bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=0)
+    g.set_xlabel('UMAP 1')
+    g.set_ylabel('UMAP 2')
+    return ax
+
+
+def view_repr_cells(adata, col_name, output_dir = None):
+    custom_colors = {0: '#000000', 1: '#4c72b0', 2: '#dd8452', 3: '#55a868', 4: '#c44e52', 5: '#8172b3', 6: '#937860', 7:'#da8bc3', 8:'#8c8c8c', 9:'#ccb974', 10:'#64b5cd'}
+
+    viewer = napari.Viewer()
+    for count, ind in enumerate(adata.uns['repr_cells']['inds']):
+        path_to_seg = adata.obsm['other_features'].iloc[ind].crop_seg
+        seg_img = imread(path_to_seg)
+        img_ch0 = seg_img[0, :, :, :]
+        img_ch1 = seg_img[1, :, :, :]
+
+        cluster = adata.obs[col_name].iloc[ind]
+        img_ch0 = np.where(img_ch0 > 0, cluster + 1, 0)
+        img_ch1 = np.where(img_ch1 > 0, cluster + 1, 0)
+
+        viewer.add_labels(img_ch0, name=f'{cluster}_ch0', blending='additive', color=custom_colors)
+        viewer.add_labels(img_ch1, name=f'{cluster}_ch1', blending='additive', color=custom_colors)
+ 
+        if output_dir is not None:
+            save_path = Path(output_dir / 'repr_cells')
+            save_path.mkdir(parents=True, exist_ok=True)
+            imsave(save_path / f'{cluster}_{count}.tiff', seg_img)
+
+    return viewer
+
+
+def reconstruct_repr_cells_from_shcoeffs(adata, alias, output_dir):
+    # TODO: would be nice to save NUC too?
+    for row in adata.uns['repr_cells'].itertuples():
+        shcoeffs = adata.X[row.inds, :]
+        save_dir = Path(output_dir / 'repr_cell_meshes')
+        save_dir.mkdir(parents=True, exist_ok=True)
+
+        save_path = f'{save_dir}/{row.cluster}_{row.k}_{alias}_reconstructed.vtk'
+        reconstruct_mesh_from_shcoeffs_array(shcoeffs, adata.var_names, alias, 32, save_path)
+
+        seg_path = adata.obsm['other_features']['crop_seg'][row.inds]
+        reader = AICSImage(seg_path)
+        seg_img = reader.get_image_data('ZYX', C=1, S=0, T=0)
+
+        mesh, _, _ = shtools.get_mesh_from_image(seg_img)
+        save_path = f'{save_dir}/{row.cluster}_{row.k}_original.vtk'
+        shtools.save_polydata(mesh, save_path)
+
+
+def get_intensity_cols_from_config(path_to_config):
+    with open(path_to_config, 'r') as stream:
+        params = yaml.safe_load(stream)
+    # some configs may not have "intensity" settings
+    raw_aliases = list(params['features']['intensity'].keys())
+    intensity_col_names = {}
+    for alias in raw_aliases:
+        for key, val in params['data'].items():
+            if alias in val.values():
+                intensity_col_names[val['channel']] = f'{alias}_intensity_mean_lcc' 
+    return intensity_col_names
+
+
+def plot_intensity_umap(adata, ch_name, int_col):
+    plt_args = plt_args = {'edgecolor': None, 's': 70}
+    fig, ax = plt.subplots(figsize=(20, 7), ncols=2)
+    subset = adata[adata.obsm['other_features'][ch_name].notna()]
+    UMAP_1 = subset.obsm['X_umap'][:, 0]
+    UMAP_2 = subset.obsm['X_umap'][:, 1]
+    g = sns.scatterplot(data=subset.obsm['other_features'], x=UMAP_1, y=UMAP_2,
+                        hue=int_col, palette='viridis', alpha=0.8, **plt_args, ax=ax[0])
+    g2 = sns.scatterplot(data=subset.obsm['other_features'], x=UMAP_1, y=UMAP_2,
+                         hue=f'{ch_name}_positive', palette=['grey', 'red'], alpha=0.8, **plt_args, ax=ax[1])
+    ax[0].legend(title='intensity z-score', bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=0)
+    ax[1].legend(title=f'{ch_name} positive', bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=0)
+    g.set_xlabel('UMAP 1')
+    g.set_ylabel('UMAP 2')
+    g2.set_xlabel('UMAP 1')
+    g2.set_ylabel('UMAP 2')
+    plt.tight_layout()
+
+
+def classify_rec_error(adata, project_dirs, alias):
+    rec_errors = pd.DataFrame()
+    for proj_dir in project_dirs:
+        rec_error = pd.read_csv(proj_dir / f'rec_errors_{alias}.csv', index_col='CellId')
+        rec_error = rec_error[rec_error.index.isin(adata.obs_names)]
+        rec_errors = pd.concat([rec_errors, rec_error])
+
+    adata.obsm['rec_error'] = rec_errors
+    # Consider moving this to the error analysis script
+    gm_model = GaussianMixture(n_components=2, covariance_type='tied')
+    gm_model.fit(rec_errors['max_hd'].values.reshape(-1, 1))
+    adata.obsm['rec_error']['gmm_classes'] = gm_model.predict(rec_errors['max_hd'].values.reshape(-1, 1))
+    return adata
+
+
+def reorder_clusters(df, by, clust_col, measure, ascending):
+    if measure == 'mean':
+        clust_vals = df.groupby(clust_col).mean(numeric_only=True)
+    if measure == 'median':
+        clust_vals = df.groupby(clust_col).median(numeric_only=True)
+    
+    clust_vals_sorted = clust_vals[by].sort_values(ascending)
+    cat_index = clust_vals_sorted.index
+    cluster_mapping = {code: count for count, code in enumerate(cat_index.codes)}
+    clust_col_remapped = df[clust_col].map(cluster_mapping)
+    num_clusts = max(cat_index)
+    clust_categorical = pd.Categorical(clust_col_remapped, range(num_clusts + 1), ordered=True)
+    return clust_categorical
