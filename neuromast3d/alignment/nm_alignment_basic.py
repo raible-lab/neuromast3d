@@ -288,19 +288,18 @@ def execute_step(config):
     # Calculate neuromast centroid and rotation angles
     cell_angles = []
 
-    for fov in fov_df.itertuples(index=False):
+    for fov in fov_df.itertuples():
 
         current_fov_cells, fov_info, seg_img = prepare_fov(fov, settings, cell_df)
         print('fov preparation complete')
 
-        for cell in current_fov_cells.itertuples(index=False):
-
+        for cell in current_fov_cells.itertuples():
             # Initialize a dict in which to store cell info
             cell_info = {}
             cell_info['nm_centroid'] = fov_info['nm_centroid']
             cell_info['fov_id'] = fov.fov_id
-            cell_info['CellId'] = cell.CellId
-            print('Aligning', cell.CellId)
+            cell_info['CellId'] = cell.Index
+            print('Aligning', cell.Index)
 
             label = int(cell.label)
 
