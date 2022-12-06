@@ -21,8 +21,7 @@ from tqdm import tqdm
 import vtk
 from vtk.util.numpy_support import vtk_to_numpy
 
-from neuromast3d.visualization.plotting_tools import get_features_data, get_matrix_of_shcoeffs_for_pca
-from neuromast3d.visualization.analysis import reconstruct_mesh_from_shcoeffs_array
+from neuromast3d.visualization.plotting_tools import get_features_data, get_matrix_of_shcoeffs_for_pca, reconstruct_mesh_from_shcoeffs_array
 
 
 def get_distances_between_meshes(original, reconstructed):
@@ -106,8 +105,6 @@ def main():
     shcoeffs, feat_names = get_matrix_of_shcoeffs_for_pca(features_data, alias=alias)
 
     rec_errors = []
-
-    rec_errors = []
     for row_ind, cell_shcoeffs in tqdm(enumerate(shcoeffs)):
         coeffs, mesh_rec, grid_rec = reconstruct_mesh_from_shcoeffs_array(
                 cell_shcoeffs,
@@ -119,7 +116,13 @@ def main():
         seg_path = features_data['crop_seg'][row_ind]
 
         reader = AICSImage(seg_path)
-        seg_img = reader.get_image_data('ZYX', C=0, S=0, T=0)
+
+        if alias == 'MEM':
+            channel = features_data['cell_seg'][row_ind]
+        elif alias == 'NUC':
+            channel = features_data['nuc_seg'][row_ind]
+
+        seg_img = reader.get_image_data('ZYX', C=channel, S=0, T=0)
         mesh, _, _ = shtools.get_mesh_from_image(seg_img)
 
         pixel_size = ast.literal_eval(features_data['pixel_size_xyz'][row_ind])
