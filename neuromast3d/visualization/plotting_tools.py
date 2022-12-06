@@ -606,7 +606,7 @@ def reorder_clusters(df, by, clust_col, measure, ascending):
     if measure == 'median':
         clust_vals = df.groupby(clust_col).median(numeric_only=True)
     
-    clust_vals_sorted = clust_vals[by].sort_values(ascending)
+    clust_vals_sorted = clust_vals[by].sort_values(ascending=ascending)
     cat_index = clust_vals_sorted.index
     cluster_mapping = {code: count for count, code in enumerate(cat_index.codes)}
     clust_col_remapped = df[clust_col].map(cluster_mapping)

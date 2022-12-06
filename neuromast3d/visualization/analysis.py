@@ -187,7 +187,8 @@ def main():
 
     # Polar plots of cell locations
     mpl_deep = plotting_tools.convert_seaborn_cmap_to_mpl('deep')
-    plotting_tools.plot_clusters_polar(adata.obsm['other_features'], 'cluster', mpl_deep)
+    adata.obsm['other_features']['pheno_leiden_sorted'] = adata.obs['pheno_leiden_sorted']
+    plotting_tools.plot_clusters_polar(adata.obsm['other_features'], 'pheno_leiden_sorted', mpl_deep)
     plt.tight_layout()
     plt.savefig(output_dir / 'polar_plots_normalized.png')
 
@@ -201,7 +202,7 @@ def main():
 
     # Calculate intensity z-scores and make intensity plots
     for ch_name, col_name in intensity_cols.items():
-        adata.obsm['other_features'] = plotting_tools.add_intensity_z_score_col(adata.obsm['other_features'], col_name, suffix=key)
+        adata.obsm['other_features'] = plotting_tools.add_intensity_z_score_col(adata.obsm['other_features'], col_name, suffix=ch_name)
         adata.obsm['other_features'][f'{ch_name}_positive'] = np.where(adata.obsm['other_features'][f'{col_name}_z_score'] > 1, 1, 0)
         plotting_tools.plot_intensity_umap(adata, ch_name, col_name)
         plt.savefig(output_dir / f'{ch_name}_intensity_umap.png', dpi=300)
