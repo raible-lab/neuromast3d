@@ -10,30 +10,18 @@ output.
 '''
 
 import argparse
-import ast
 import logging
 from pathlib import Path
 import sys
-from typing import Optional, Union
 
-from aicsimageio import AICSImage
-from aicsshparam import shtools
 import anndata as ad
-import matplotlib
-from matplotlib.colors import ListedColormap
 from matplotlib import pyplot as plt
 import napari
 import numpy as np
 import pandas as pd
-import phenograph
 import scanpy as sc
 from scanpy import external, pp, tl, pl
 import seaborn as sns
-from sklearn.decomposition import PCA
-from sklearn.mixture import GaussianMixture
-from tifffile import imread, imsave
-import umap
-import yaml
 
 from neuromast3d.misc.find_closest_cells import RepresentativeCellFinder
 from neuromast3d.visualization import plotting_tools
@@ -125,9 +113,7 @@ def main():
 
     # Generate PCA plot
     fig, ax = plt.subplots(nrows=1, ncols=2, figsize=(14, 7))
-    plotting_tools.plot_pca_var_explained(adata, ax)
-    plt.tight_layout()
-    plt.savefig(output_dir / 'pca_var_explained.png')
+    plotting_tools.plot_pca_var_explained(adata, ax, output_dir / 'pca_var_explained.png')
 
     # UMAP embedding
     fig, ax = plt.subplots(figsize=(8, 6))
@@ -170,10 +156,8 @@ def main():
     adata.uns['repr_cells'] = repr_cells_df
 
     fig, ax = plt.subplots(figsize=(8, 6))
-    plotting_tools.plot_repr_cells_umap(adata, 'pheno_leiden_sorted', ax)
-    plt.tight_layout()
-    plt.savefig(output_dir / 'pca_variance_explained.png')
-    
+    plotting_tools.plot_repr_cells_umap(adata, ax, output_dir / 'repr_cells_umap.png', hue=adata.obs['pheno_leiden_sorted'])
+
     viewer = plotting_tools.view_repr_cells(adata, 'pheno_leiden_sorted', output_dir)
     napari.run()
 
@@ -182,14 +166,12 @@ def main():
     if len(project_dirs) > 1:
         # Multiple batches, plot comparison
         fig, ax = plt.subplots(figsize=(8, 6))
-        plotting_tools.plot_batch_umap(adata, ax)
-        plt.tight_layout()
+        plotting_tools.plot_umap_from_adata(adata, ax, output_dir / 'batch_umap.png', hue=adata.obsm['other_features']['batch'], palette='deep')
 
     # Polar plots of cell locations
     mpl_deep = plotting_tools.convert_seaborn_cmap_to_mpl('deep')
     adata.obsm['other_features']['pheno_leiden_sorted'] = adata.obs['pheno_leiden_sorted']
     plotting_tools.plot_clusters_polar(adata.obsm['other_features'], 'pheno_leiden_sorted', mpl_deep)
-    plt.tight_layout()
     plt.savefig(output_dir / 'polar_plots_normalized.png')
 
     # Analyze intensity based stuff

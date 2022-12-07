@@ -473,7 +473,7 @@ def plot_clusters_polar(df, col_name: str, cmap):
     return axs
 
 
-def plot_pca_var_explained(adata, ax):
+def plot_pca_var_explained(adata, ax, save_path: Union[str, Path, None] = None):
     ax[0].plot(adata.uns['pca']['variance_ratio'])
     ax[0].set_xlabel('Number of principal components')
     ax[0].set_ylabel('Variance explained')
@@ -482,35 +482,77 @@ def plot_pca_var_explained(adata, ax):
     ax[1].set_ylabel('Cumulative variance explained')
     ax[0].set_xticks(np.arange(0, adata.obsm['X_pca'].shape[1]+1, 10))
     ax[1].set_xticks(np.arange(0, adata.obsm['X_pca'].shape[1]+1, 10))
+    plt.tight_layout()
+    if save_path is not None:
+        plt.savefig(save_path, dpi=300)
     return ax
 
 
-def plot_repr_cells_umap(adata, col_name, ax):
+def plot_umap_from_adata(adata, ax=None, save_path: Union[str, Path, None] = None, **sns_kwargs):
+    """
+    Basic function for plotting UMAPs from processed AnnData objects.
+
+    Parameters
+    ----------
+    adata: AnnData object. Must have been processed with scanpy.pl.umap.
+
+    ax : matplotlib axes object, such as that created by plt.subplots().
+        If None (the default), will use plt.gca() to provide the axes object.
+
+    save_path: The absolute filepath where the plot will be saved. 
+        If None (the default), the plot is not saved.
+
+    **sns_kwargs: Keyword arguments to pass to sns.scatterplot.
+
+    Returns
+    -------
+    ax: matplotlib axes object containing the plot.
+
+    """
+    if ax is None:
+        ax = plt.gca()
+
     UMAP_1 = adata.obsm['X_umap'][:, 0]
     UMAP_2 = adata.obsm['X_umap'][:, 1]
 
-    g = sns.scatterplot(x=UMAP_1, y=UMAP_2, hue=adata.obs[col_name], palette='deep')
+    g = sns.scatterplot(x=UMAP_1, y=UMAP_2, **sns_kwargs)
+    g.set_xlabel('UMAP 1')
+    g.set_ylabel('UMAP 2')
+
+    plt.legend(bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=0)
+    plt.tight_layout()
+
+    if save_path is not None:
+        plt.savefig(save_path, dpi=300)
+
+    return ax
+
+
+def plot_repr_cells_umap(adata, ax=None, save_path: Union[str, Path, None] = None, **sns_kwargs):
+    if ax is None:
+        ax = plt.gca()
+
+    UMAP_1 = adata.obsm['X_umap'][:, 0]
+    UMAP_2 = adata.obsm['X_umap'][:, 1]
+
+    g = sns.scatterplot(x=UMAP_1, y=UMAP_2, **sns_kwargs)
+    g.set_xlabel('UMAP 1')
+    g.set_ylabel('UMAP 2')
+
     repr_cells_df = adata.uns['repr_cells']
     plt.scatter(UMAP_1[repr_cells_df['inds']], UMAP_2[repr_cells_df['inds']], s=70, color='black', edgecolors='white')
     plt.legend(title='cluster', bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=0)
-    g.set_xlabel('UMAP 1')
-    g.set_ylabel('UMAP 2')
-    return ax
+    plt.tight_layout()
 
+    if save_path is not None:
+        plt.savefig(save_path, dpi=300)
 
-def plot_batch_umap(adata, ax):
-    UMAP_1 = adata.obsm['X_umap'][:, 0]
-    UMAP_2 = adata.obsm['X_umap'][:, 1]
-
-    g = sns.scatterplot(x=UMAP_1, y=UMAP_2, hue=adata.obsm['other_features']['batch'], palette='deep')
-    plt.legend(bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=0)
-    g.set_xlabel('UMAP 1')
-    g.set_ylabel('UMAP 2')
     return ax
 
 
 def view_repr_cells(adata, col_name, output_dir = None):
-    custom_colors = {0: '#000000', 1: '#4c72b0', 2: '#dd8452', 3: '#55a868', 4: '#c44e52', 5: '#8172b3', 6: '#937860', 7:'#da8bc3', 8:'#8c8c8c', 9:'#ccb974', 10:'#64b5cd'}
+    custom_colors = ['#000000'] + adata.uns[f'{col_name}_colors']
+    color_mapping = {cl: col for cl, col in enumerate(custom_colors)}
 
     viewer = napari.Viewer()
     for count, ind in enumerate(adata.uns['repr_cells']['inds']):
@@ -523,8 +565,8 @@ def view_repr_cells(adata, col_name, output_dir = None):
         img_ch0 = np.where(img_ch0 > 0, cluster + 1, 0)
         img_ch1 = np.where(img_ch1 > 0, cluster + 1, 0)
 
-        viewer.add_labels(img_ch0, name=f'{cluster}_ch0', blending='additive', color=custom_colors)
-        viewer.add_labels(img_ch1, name=f'{cluster}_ch1', blending='additive', color=custom_colors)
+        viewer.add_labels(img_ch0, name=f'{cluster}_ch0', blending='additive', color=color_mapping)
+        viewer.add_labels(img_ch1, name=f'{cluster}_ch1', blending='additive', color=color_mapping)
  
         if output_dir is not None:
             save_path = Path(output_dir / 'repr_cells')
@@ -567,7 +609,7 @@ def get_intensity_cols_from_config(path_to_config):
 
 
 def plot_intensity_umap(adata, ch_name, int_col):
-    plt_args = plt_args = {'edgecolor': None, 's': 70}
+    plt_args = {'edgecolor': None, 's': 70}
     fig, ax = plt.subplots(figsize=(20, 7), ncols=2)
     subset = adata[adata.obsm['other_features'][ch_name].notna()]
     UMAP_1 = subset.obsm['X_umap'][:, 0]
