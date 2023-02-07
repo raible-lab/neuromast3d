@@ -316,7 +316,7 @@ def execute_step(config):
 
             try:
                 seg_cell_aligned, angle_1, angle_2, angle_3 = align_cell_3d(seg_cell, cell_info, settings)
-                raw_cell_aligned = apply_3d_rotation(raw_cell, angle_1, angle_2, angle_3)
+                raw_cell_aligned = apply_3d_rotation(raw_cell, -angle_1, -angle_2, -angle_3)
                 cell_info['rotation_angle'] = angle_1
                 cell_info['rotation_angle_2'] = angle_2
                 cell_info['rotation_angle_3'] = angle_3
