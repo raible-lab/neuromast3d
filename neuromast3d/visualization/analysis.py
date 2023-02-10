@@ -189,10 +189,11 @@ def main():
     for ch_name, col_name in intensity_cols.items():
         adata.obs[f'{col_name}'] = adata.obsm['other_features'][col_name]
         adata.obs = plotting_tools.add_intensity_z_score_col(adata.obs, col_name, suffix=ch_name)
-        adata.obs[f'{ch_name}_positive'] = adata.obs[f'{col_name}_z_score'] > 1
+        binarized = adata.obs[f'{col_name}_z_score'] > 1
 
         # If not from an experiment with that label, remain NaN
-        adata.obs[f'{ch_name}_positive'].isnull() = np.NaN
+        binarized[adata.obs[f'{col_name}_z_score'].isnull()] = np.NaN
+        adata.obs[f'{ch_name}_positive'] = binarized
         sc.pl.umap(adata, color=f'{ch_name}_positive', save=f'{ch_name}_umap.png', show=False)
         sc.pl.umap(adata, color=f'{col_name}_z_score', save=f'{ch_name}_z_score.png', show=False)
 
