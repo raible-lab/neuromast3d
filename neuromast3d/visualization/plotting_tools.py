@@ -93,6 +93,14 @@ def add_intensity_z_score_col(df_clustered, col_name: str, suffix: str):
     return df_clustered_copy
 
 
+def calculate_intensity_z_scores(df, col_name: str, suffix: str):
+    df_by_fov = pd.DataFrame()
+    df_by_fov[f'mean_{suffix}'] = df.groupby(['fov_id']).mean()[col_name]
+    df_by_fov[f'sd_{suffix}'] = df.groupby(['fov_id']).std()[col_name]
+    z_scores = (df_by_fov[col_name] - df_by_fov[f'mean_{suffix}']) / df_by_fov[f'sd_{suffix}']
+    return z_scores
+
+
 def get_features_data(local_staging_dir):
     cf_path = local_staging_dir / 'computefeatures/manifest.csv'
     df = pd.read_csv(cf_path, index_col='CellId')
@@ -363,24 +371,31 @@ def reconstruct_pc_meshes(adata, pca_model, alias: str, num_pcs: int, sd_bins: l
 
 
 def run_custom_pca(
-    df,
     adata,
-    subset_col: str,
-    subset_vals: list,
     alias: str,
     n_comps: Union[float, int],
-    zero_center: Optional[bool] = True,
+    batches: Optional[list] = None,
     use_highly_variable: Optional[bool] = None,
 ):
     # Fit PCA to subset of data, apply transform to rest, then add to adata object
     # Modified from original scanpy function
-    pca_ = fit_pca_to_subset(df, subset_col, subset_vals, alias, n_comps)
-    axes = apply_pca_transform(df, pca_, alias=alias)
+    if batches is not None:
+        subset = adata[adata.obs['batch'].isin(batches)]
+        df = subset.to_df()
+
+    else:
+        df = adata.to_df()
+
+    shcoeffs, _ = get_matrix_of_shcoeffs_for_pca(df, alias)
+    pca_ = PCA(n_components=n_comps)
+    pca_.fit(shcoeffs)
+    axes = apply_pca_transform(adata.to_df(), pca_, alias=alias)
+
     X_pca = axes.values
     adata.obsm['X_pca'] = X_pca
     adata.uns['pca'] = {}
     adata.uns['pca']['params'] = {
-        'zero_center': zero_center,
+        'zero_center': True,
         'use_highly_variable': use_highly_variable,
     }
 
@@ -453,6 +468,37 @@ def add_distances_to_dataframe(df):
     return df_merged
 
 
+def calculate_cell_positions(df):
+    df_new = pd.DataFrame() 
+    df_new['nm_centroid'] = df['nm_centroid'].apply(ast.literal_eval)
+    df_new['cell_centroid'] = df['centroid'].apply(ast.literal_eval)
+    dist = df_new['cell_centroid'].apply(np.array) - df_new['nm_centroid'].apply(np.array)
+
+    # Sign of y is flipped to convert from rc coords to xy coords
+    df_new['z_dist'], df_new['y_dist'], df_new['x_dist'] = zip(*dist)
+    df_new['y_dist'] = -df_new['y_dist']
+
+    xy_dist = df_new[['y_dist', 'x_dist']].values.tolist()
+    df_new['raw_xy_dist_from_center'] = [np.linalg.norm(row) for row in xy_dist]
+
+    # Convert rotation angle to radians for plottings
+    df_new['rotation_angle'] = df['rotation_angle']
+    df_new['rotation_angle_in_rads'] = df_new['rotation_angle']*np.pi/180
+
+    # DV should be counterclockwise rotated by 90 degrees
+    df_new['corrected_rotation_angle'] = df_new['rotation_angle']
+    df_new['polairty'] = df['polairty']
+    df_new.loc[df_new['polairty'] == 'DV', 'corrected_rotation_angle'] = df_new['rotation_angle'] + 90
+    df_new['corrected_rotation_angle_in_rads'] = df_new['corrected_rotation_angle']*np.pi/180
+
+    # Normalize to centroid of cell furthest from the neuromast center
+    df_new['fov_id'] = df['fov_id']
+    groups = df_new.groupby(['fov_id'])
+    max_vals = groups.transform('max')
+    df_new['normalized_xy_dist_from_center'] = df_new['raw_xy_dist_from_center'] / max_vals['raw_xy_dist_from_center']
+    return df_new
+
+
 def convert_seaborn_cmap_to_mpl(sns_cmap):
     mpl_cmap = ListedColormap(sns.color_palette(sns_cmap).as_hex())
     return mpl_cmap
@@ -460,24 +506,24 @@ def convert_seaborn_cmap_to_mpl(sns_cmap):
 
 def plot_clusters_polar(df, col_name: str, cmap):
     clust_groups = df.groupby(col_name)
-    fig, axs = plt.subplots(ncols=len(clust_groups), figsize=(20, 8), subplot_kw={'projection': 'polar'}, sharey=True)
+    fig, axs = plt.subplots(ncols=len(clust_groups), figsize=(12, 2), subplot_kw={'projection': 'polar'}, sharey=True)
     for name, group in clust_groups:
         # this assumes clusters are integers from 0 to n clusters
         axs[name].plot(
                 group['corrected_rotation_angle_in_rads'].values,
                 group['normalized_xy_dist_from_center'].values,
                 '.',
-                color=cmap(name)
+                color=cmap(name),
+                markersize=2
             )
-    plt.tight_layout()
     return axs
 
 
 def plot_pca_var_explained(adata, ax, save_path: Union[str, Path, None] = None):
-    ax[0].plot(adata.uns['pca']['variance_ratio'])
+    ax[0].plot(adata.uns['pca']['variance_ratio'], color='darkgray', lw=2, marker='o')
     ax[0].set_xlabel('Number of principal components')
     ax[0].set_ylabel('Variance explained')
-    ax[1].plot(np.cumsum(adata.uns['pca']['variance_ratio']))
+    ax[1].plot(np.cumsum(adata.uns['pca']['variance_ratio']), color='darkgray', lw=2, marker='o')
     ax[1].set_xlabel('Number of PCs')
     ax[1].set_ylabel('Cumulative variance explained')
     ax[0].set_xticks(np.arange(0, adata.obsm['X_pca'].shape[1]+1, 10))
@@ -515,7 +561,7 @@ def plot_umap_from_adata(adata, ax=None, save_path: Union[str, Path, None] = Non
     UMAP_1 = adata.obsm['X_umap'][:, 0]
     UMAP_2 = adata.obsm['X_umap'][:, 1]
 
-    g = sns.scatterplot(x=UMAP_1, y=UMAP_2, **sns_kwargs)
+    g = sns.scatterplot(x=UMAP_1, y=UMAP_2, ax=ax, **sns_kwargs)
     g.set_xlabel('UMAP 1')
     g.set_ylabel('UMAP 2')
 
@@ -551,8 +597,9 @@ def plot_repr_cells_umap(adata, ax=None, save_path: Union[str, Path, None] = Non
 
 
 def view_repr_cells(adata, col_name, output_dir = None):
-    custom_colors = ['#000000'] + adata.uns[f'{col_name}_colors']
+    custom_colors = ['#000000'] + list(adata.uns[f'{col_name}_colors'])
     color_mapping = {cl: col for cl, col in enumerate(custom_colors)}
+    print(color_mapping)
 
     viewer = napari.Viewer()
     for count, ind in enumerate(adata.uns['repr_cells']['inds']):
@@ -612,12 +659,15 @@ def plot_intensity_umap(adata, ch_name, int_col):
     plt_args = {'edgecolor': None, 's': 70}
     fig, ax = plt.subplots(figsize=(20, 7), ncols=2)
     subset = adata[adata.obsm['other_features'][ch_name].notna()]
+    # Sort so that cells with higher vals on top in the plot
+    order = np.argsort(subset.obs[int_col])
+    subset = subset[order]
     UMAP_1 = subset.obsm['X_umap'][:, 0]
     UMAP_2 = subset.obsm['X_umap'][:, 1]
-    g = sns.scatterplot(data=subset.obsm['other_features'], x=UMAP_1, y=UMAP_2,
+    g = sns.scatterplot(data=subset.obs, x=UMAP_1, y=UMAP_2,
                         hue=int_col, palette='viridis', alpha=0.8, **plt_args, ax=ax[0])
-    g2 = sns.scatterplot(data=subset.obsm['other_features'], x=UMAP_1, y=UMAP_2,
-                         hue=f'{ch_name}_positive', palette=['grey', 'red'], alpha=0.8, **plt_args, ax=ax[1])
+    g2 = sns.scatterplot(data=subset.obs, x=UMAP_1, y=UMAP_2,
+                         hue=f'{ch_name}_positive', palette=['silver', 'fuchsia'], alpha=0.8, **plt_args, ax=ax[1])
     ax[0].legend(title='intensity z-score', bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=0)
     ax[1].legend(title=f'{ch_name} positive', bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=0)
     g.set_xlabel('UMAP 1')
