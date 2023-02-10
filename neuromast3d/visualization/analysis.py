@@ -85,7 +85,6 @@ def main():
     feat_data = feat_data.rename({'fov_id_x': 'fov_id'}, axis=1)
     feat_data = feat_data.merge(curated_feat_data, on='fov_id', how='left')
     feat_data = feat_data.set_index('CellId')
-    feat_data['genotype'] = plotting_tools.get_genotypes_from_cellids(feat_data)
     feat_data = feat_data.drop(feat_data.loc[feat_data['MEM_shape_volume'] < 400000].index)
 
     # Spherical harmonics coeffs are a standin for gene expression here
@@ -93,6 +92,7 @@ def main():
     adata = ad.AnnData(matrix_of_shcoeffs)
     adata.obs_names = feat_data.index
     adata.var_names = feature_names
+    adata.obs['genotype'] = plotting_tools.get_genotypes_from_cellids(feat_data)
 
     if classify_rec_error:
         logger.info('classifying cells by rec error')
@@ -101,7 +101,8 @@ def main():
         plt.tight_layout()
         plt.savefig(output_dir / 'rec_error_gmm_split.png')
 
-    adata, pca, axes = plotting_tools.run_custom_pca(feat_data, adata, 'batch', pca_batches, alias, 0.90)
+    adata.obs['batch'] = feat_data['batch']
+    adata, pca, axes = plotting_tools.run_custom_pca(adata, alias, 0.90, pca_batches)
     logger.info(f'PCA done on batches {pca_batches}')
 
     num_pcs = len(axes.columns)
@@ -122,14 +123,14 @@ def main():
 
     # Rearrange clusters by distance from neuromast center
     adata.obsm['other_features'] = feat_data[feat_data.columns.difference(feature_names)]
-    adata.obsm['other_features'] = plotting_tools.add_distances_to_dataframe(adata.obsm['other_features'])
+    cell_positions = plotting_tools.calculate_cell_positions(adata.obsm['other_features'])
+    adata.obs = pd.concat([adata.obs, cell_positions], axis=1)
 
-    adata.obsm['other_features']['pheno_leiden'] = adata.obs['pheno_leiden']
     adata.obs['pheno_leiden_sorted'] = plotting_tools.reorder_clusters(
-        adata.obsm['other_features'], 
-        'normalized_xy_dist_from_center', 
-        'pheno_leiden', 
-        'median', 
+        adata.obs,
+        'normalized_xy_dist_from_center',
+        'pheno_leiden',
+        'median',
         False
     )
 
@@ -166,12 +167,12 @@ def main():
     if len(project_dirs) > 1:
         # Multiple batches, plot comparison
         fig, ax = plt.subplots(figsize=(8, 6))
-        plotting_tools.plot_umap_from_adata(adata, ax, output_dir / 'batch_umap.png', hue=adata.obsm['other_features']['batch'], palette='deep')
+        plotting_tools.plot_umap_from_adata(adata, ax, output_dir / 'batch_umap.png', hue=adata.obs['batch'], palette='deep')
 
     # Polar plots of cell locations
     mpl_deep = plotting_tools.convert_seaborn_cmap_to_mpl('deep')
-    adata.obsm['other_features']['pheno_leiden_sorted'] = adata.obs['pheno_leiden_sorted']
-    plotting_tools.plot_clusters_polar(adata.obsm['other_features'], 'pheno_leiden_sorted', mpl_deep)
+    #adata.obsm['other_features']['pheno_leiden_sorted'] = adata.obs['pheno_leiden_sorted']
+    plotting_tools.plot_clusters_polar(adata.obs, 'pheno_leiden_sorted', mpl_deep)
     plt.savefig(output_dir / 'polar_plots_normalized.png')
 
     # Analyze intensity based stuff
@@ -182,19 +183,30 @@ def main():
             plotting_tools.get_intensity_cols_from_config(path_to_config)
         )
 
+    adata.uns['intensity_cols'] = intensity_cols
+
     # Calculate intensity z-scores and make intensity plots
     for ch_name, col_name in intensity_cols.items():
-        adata.obsm['other_features'] = plotting_tools.add_intensity_z_score_col(adata.obsm['other_features'], col_name, suffix=ch_name)
-        adata.obsm['other_features'][f'{ch_name}_positive'] = np.where(adata.obsm['other_features'][f'{col_name}_z_score'] > 1, 1, 0)
-        plotting_tools.plot_intensity_umap(adata, ch_name, col_name)
-        plt.savefig(output_dir / f'{ch_name}_intensity_umap.png', dpi=300)
+        adata.obs[f'{col_name}'] = adata.obsm['other_features'][col_name]
+        adata.obs = plotting_tools.add_intensity_z_score_col(adata.obs, col_name, suffix=ch_name)
+        adata.obs[f'{ch_name}_positive'] = np.where(adata.obs[f'{col_name}_z_score'] > 1, 1, 0)
+        sc.pl.umap(adata, color=f'{ch_name}_positive', save=f'{ch_name}_umap.png', show=False)
+        sc.pl.umap(adata, color=f'{col_name}_z_score', save=f'{ch_name}_z_score.png', show=False)
 
 
     # Fix columns that prevent saving
     adata.obsp['pheno_jaccard_ig'] = adata.obsp['pheno_jaccard_ig'].tocsr()
-    adata.obsm['other_features']['nm_centroid'] = adata.obsm['other_features']['nm_centroid'].astype('str')
+    #adata.obsm['other_features']['nm_centroid'] = adata.obsm['other_features']['nm_centroid'].astype('str')
+    print(adata.obs['polairty'].dtype)
+    print(adata.obsm['other_features']['polairty'].dtype)
+    print(adata.obs['batch'].dtype)
+    adata.obs['nm_centroid'] = adata.obs['nm_centroid'].astype('str')
     adata.obsm['other_features']['polairty'] = adata.obsm['other_features']['polairty'].astype('str')
-    adata.obsm['other_features']['cell_centroid'] = adata.obsm['other_features']['cell_centroid'].astype('str')
+    adata.obsm['other_features']['centroid'] = adata.obsm['other_features']['centroid'].astype('str')
+    adata.obs['cell_centroid'] = adata.obs['cell_centroid'].astype('str')
+
+    # Don't know why this is needed all of the sudden...
+    adata.obsm['other_features']['cells_to_exclude'] = adata.obsm['other_features']['cells_to_exclude'].astype('str')
 
     adata.write(output_dir / 'adata.h5ad')
     plt.show()
