@@ -21,35 +21,57 @@ def read_fov_dataset(project_dir: Path):
 class FovCurator:
     def __init__(self, fov_id):
         self.fov_id = fov_id
-        self.picked_labels = []
+        self.excluded_cells = []
+        self.hair_cells = []
         self.polarity = None
 
-    def pick_labels(self, labels: Labels, undo_last: bool = False):
+    def __pick_labels(
+            self,
+            picked_labels: list,
+            labels: Labels,
+            undo_last: bool = False
+        ):
         # Expected to be decorated with magicgui when called
         if labels is not None:
-
             if undo_last:
                 try:
-                    self.picked_labels.pop()
+                    picked_labels.pop()
                 except IndexError:
                     pass
 
             else:
                 label = labels.selected_label
-                if label not in self.picked_labels:
-                    self.picked_labels.append(label)
-            
-            return self.picked_labels
+                if label not in picked_labels:
+                    picked_labels.append(label)
+
+            return picked_labels
+
+    def pick_bad_cells(self, labels: Labels, undo_last: bool = False):
+        self.excluded_cells = self.__pick_labels(
+                self.excluded_cells, 
+                labels,
+                undo_last
+        )
+        return self.excluded_cells
+
+    def pick_hair_cells(self, labels: Labels, undo_last: bool = False):
+        self.hair_cells = self.__pick_labels(
+                self.hair_cells, 
+                labels,
+                undo_last
+        )
+        return self.hair_cells
 
     def indicate_polarity(self, axis: str):
         # Expected to be decorated with magicgui when called
-        self.polarity = axis 
+        self.polarity = axis
 
     def info_to_dict(self):
         output_dict = {
                 'fov_id': self.fov_id,
-                'polairty': self.polarity,
-                'cells_to_exclude': self.picked_labels
+                'polarity': self.polarity,
+                'cells_to_exclude': self.excluded_cells,
+                'hair_cells': self.hair_cells
         }
         return output_dict
 
@@ -69,18 +91,26 @@ def main():
             fov.SegmentationReadPath
         )
 
+        raw_nuc = raw_img[fov.nucleus, :, :, :]
+        raw_mem = raw_img[fov.membrane, :, :, :]
+        seg_mem = seg_img[fov.cell_seg, :, :, :]
+
         viewer = napari.Viewer()
-        viewer.add_image(raw_img)
-        viewer.add_labels(seg_img)
+        viewer.add_image(raw_nuc)
+        viewer.add_image(raw_mem)
+        viewer.add_labels(seg_mem)
 
         curator = FovCurator(fov.NM_ID)
         polarity_indicator = magicgui(
-                curator.indicate_polarity, 
+                curator.indicate_polarity,
                 axis={'choices': ['AP', 'DV']},
         )
-        label_picker = magicgui(curator.pick_labels, result_widget=True)
+
+        bc_picker = magicgui(curator.pick_bad_cells, result_widget=True)
+        hc_picker = magicgui(curator.pick_hair_cells, result_widget=True)
         viewer.window.add_dock_widget(polarity_indicator, area='right')
-        viewer.window.add_dock_widget(label_picker, area='right')
+        viewer.window.add_dock_widget(bc_picker, area='right', name='bad_cells')
+        viewer.window.add_dock_widget(hc_picker, area='right', name='hair_cells')
 
         napari.run()
 
@@ -89,7 +119,7 @@ def main():
     # Will just save in project dir for now
     # May change how this works later
     curated_fov_df = pd.DataFrame(curated_fov_info)
-    curated_fov_df.to_csv(project_dir / 'curated_fov_datset.csv')
+    curated_fov_df.to_csv(project_dir / 'curated_fov_dataset.csv')
 
 
 if __name__ == '__main__':
