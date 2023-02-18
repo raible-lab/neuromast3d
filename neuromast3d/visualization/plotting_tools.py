@@ -179,10 +179,10 @@ def get_list_of_basic_features(aliases: list = ['NUC', 'MEM']):
     for alias in aliases:
         list_of_features.extend([
             f'{alias}_shape_volume_lcc',
+            f'{alias}_roundness_surface_area',
             f'{alias}_position_depth',
             f'{alias}_position_height',
             f'{alias}_position_width',
-            f'{alias}_roundness_surface_area'
         ])
     return list_of_features
 
@@ -249,7 +249,7 @@ def color_code_fov_images_by_feature(cell_dataset, feature_col, save):
             imsave(save_dir / f'{fov.fov_id}.tiff', merged_image)
 
 
-def circular_hist(ax, x, bins=16, density=True, offset=0, gaps=True):
+def circular_hist(ax, x, bins=16, density=True, offset=0, gaps=True, **tick_kwargs):
     """
     Produce a circular histogram of angles on ax.
 
@@ -275,6 +275,9 @@ def circular_hist(ax, x, bins=16, density=True, offset=0, gaps=True):
     gaps : bool, optional
         Whether to allow gaps between bins. When gaps = False the bins are
         forced to partition the entire [-pi, pi] range. The default is True.
+
+    **tick_kwargs: optional
+        Keyward arguments passed to ax.tick_params().
 
     Returns
     -------
@@ -321,6 +324,9 @@ def circular_hist(ax, x, bins=16, density=True, offset=0, gaps=True):
     # Remove ylabels for area plots (they are mostly obstructive)
     if density:
         ax.set_yticks([])
+
+    # Set tick params if wanted
+    ax.tick_params(**tick_kwargs)
 
     return n, bins, patches
 
@@ -504,9 +510,9 @@ def convert_seaborn_cmap_to_mpl(sns_cmap):
     return mpl_cmap
 
 
-def plot_clusters_polar(df, col_name: str, cmap):
+def plot_clusters_polar(df, col_name: str, cmap, **tick_kwargs):
     clust_groups = df.groupby(col_name)
-    fig, axs = plt.subplots(ncols=len(clust_groups), figsize=(12, 2), subplot_kw={'projection': 'polar'}, sharey=True)
+    fig, axs = plt.subplots(ncols=len(clust_groups), figsize=(8, 1.5), subplot_kw={'projection': 'polar'}, sharey=True)
     for name, group in clust_groups:
         # this assumes clusters are integers from 0 to n clusters
         axs[name].plot(
@@ -516,6 +522,7 @@ def plot_clusters_polar(df, col_name: str, cmap):
                 color=cmap(name),
                 markersize=2
             )
+        axs[name].tick_params(**tick_kwargs)
     return axs
 
 
@@ -651,7 +658,7 @@ def get_intensity_cols_from_config(path_to_config):
     for alias in raw_aliases:
         for key, val in params['data'].items():
             if alias in val.values():
-                intensity_col_names[val['channel']] = f'{alias}_intensity_mean_lcc' 
+                intensity_col_names[val['channel']] = alias
     return intensity_col_names
 
 

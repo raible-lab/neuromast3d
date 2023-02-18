@@ -186,7 +186,8 @@ def main():
     adata.uns['intensity_cols'] = intensity_cols
 
     # Calculate intensity z-scores and make intensity plots
-    for ch_name, col_name in intensity_cols.items():
+    for ch_name, name in intensity_cols.items():
+        col_name = f'{name}_intensity_mean_lcc'
         adata.obs[f'{col_name}'] = adata.obsm['other_features'][col_name]
         adata.obs = plotting_tools.add_intensity_z_score_col(adata.obs, col_name, suffix=ch_name)
         binarized = adata.obs[f'{col_name}_z_score'] > 1
