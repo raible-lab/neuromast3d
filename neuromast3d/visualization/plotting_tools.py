@@ -162,6 +162,18 @@ def drop_manually_curated_cells(cell_df, curated_df):
     return cell_df_cleaned
 
 
+def add_hc_column(cell_df, curated_df):
+    curated_df = curated_df.copy()
+    curated_df['hair_cells'] = curated_df['hair_cells'].apply(ast.literal_eval)
+    curated_df = curated_df.explode('hair_cells')
+    curated_df = curated_df.dropna(axis=0, subset=['hair_cells'])
+    hc_ids = curated_df['fov_id'] + '_' + curated_df['hair_cells'].astype(str)
+    cell_df = cell_df.copy()
+    cell_df['hair_cell'] = False
+    cell_df.loc[hc_ids, 'hair_cell'] = True
+    return cell_df
+
+
 def get_genotypes_from_cellids(cell_df) -> list:
     genotypes = []
     for row in cell_df.itertuples(index=True):
@@ -316,7 +328,7 @@ def circular_hist(ax, x, bins=16, density=True, offset=0, gaps=True, **tick_kwar
 
     # Plot data on ax
     patches = ax.bar(bins[:-1], radius, zorder=1, align='edge', width=widths,
-                     edgecolor='C0', fill=False, linewidth=1)
+                     edgecolor='darkgrey', fill=False, linewidth=1)
 
     # Set the direction of the zero angle
     ax.set_theta_offset(offset)
@@ -463,7 +475,7 @@ def add_distances_to_dataframe(df):
     # Will need to check this is right later, just doing it quickly for now
     # DV should be counterclockwise rotated by 90 degrees
     df_merged['corrected_rotation_angle'] = df_merged['rotation_angle']
-    df_merged.loc[df_merged['polairty'] == 'DV', 'corrected_rotation_angle'] = df_merged['rotation_angle'] + 90
+    df_merged.loc[df_merged['polarity'] == 'DV', 'corrected_rotation_angle'] = df_merged['rotation_angle'] + 90
 
     df_merged['corrected_rotation_angle_in_rads'] = df_merged['corrected_rotation_angle']*np.pi/180
 
@@ -493,8 +505,8 @@ def calculate_cell_positions(df):
 
     # DV should be counterclockwise rotated by 90 degrees
     df_new['corrected_rotation_angle'] = df_new['rotation_angle']
-    df_new['polairty'] = df['polairty']
-    df_new.loc[df_new['polairty'] == 'DV', 'corrected_rotation_angle'] = df_new['rotation_angle'] + 90
+    df_new['polarity'] = df['polarity']
+    df_new.loc[df_new['polarity'] == 'DV', 'corrected_rotation_angle'] = df_new['rotation_angle'] + 90
     df_new['corrected_rotation_angle_in_rads'] = df_new['corrected_rotation_angle']*np.pi/180
 
     # Normalize to centroid of cell furthest from the neuromast center

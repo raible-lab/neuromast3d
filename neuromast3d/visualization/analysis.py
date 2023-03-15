@@ -37,7 +37,6 @@ def main():
     # Take inputs here
     parser = argparse.ArgumentParser()
     parser.add_argument('--project_dirs', type=str, nargs='+')
-    parser.add_argument('--curation_csvs', type=str, nargs='+')
     parser.add_argument('--output_dir', type=str)
     parser.add_argument('--pca_batches', type=int, nargs='+')
     parser.add_argument('--pca_alias', type=str)
@@ -47,7 +46,8 @@ def main():
     args = parser.parse_args()
 
     project_dirs = [Path(pd) for pd in args.project_dirs]
-    curation_files = [Path(cf) for cf in args.curation_csvs]
+    ls_dirs = [pd / 'local_staging' for pd in project_dirs]
+    curation_files = [pd / 'curated_fov_dataset.csv' for pd in project_dirs]
     output_dir = Path(args.output_dir)
     pca_batches = args.pca_batches
     alias = args.pca_alias
@@ -75,8 +75,9 @@ def main():
     sc._settings.ScanpyConfig.figdir = output_dir
 
     # Automatically combine experiments
-    feat_data = plotting_tools.combine_features_datasets(project_dirs)
+    feat_data = plotting_tools.combine_features_datasets(ls_dirs)
     curated_feat_data = pd.concat([pd.read_csv(file) for file in curation_files])
+    feat_data = plotting_tools.add_hc_column(feat_data, curated_feat_data)
     feat_data = plotting_tools.drop_manually_curated_cells(feat_data, curated_feat_data)
     feat_data['CellId'] = feat_data.index
 
@@ -96,7 +97,7 @@ def main():
 
     if classify_rec_error:
         logger.info('classifying cells by rec error')
-        adata = plotting_tools.classify_rec_error(adata, project_dirs, alias)
+        adata = plotting_tools.classify_rec_error(adata, ls_dirs, alias)
         sns.kdeplot(adata.obsm['rec_error'], x='max_hd', hue='gmm_classes')
         plt.tight_layout()
         plt.savefig(output_dir / 'rec_error_gmm_split.png')
@@ -177,8 +178,8 @@ def main():
 
     # Analyze intensity based stuff
     intensity_cols = {}
-    for proj_dir in project_dirs:
-        path_to_config = proj_dir / 'computefeatures/parameters.yaml'
+    for ls_dir in ls_dirs:
+        path_to_config = ls_dir / 'computefeatures/parameters.yaml'
         intensity_cols.update(
             plotting_tools.get_intensity_cols_from_config(path_to_config)
         )
@@ -202,11 +203,11 @@ def main():
     # Fix columns that prevent saving
     adata.obsp['pheno_jaccard_ig'] = adata.obsp['pheno_jaccard_ig'].tocsr()
     #adata.obsm['other_features']['nm_centroid'] = adata.obsm['other_features']['nm_centroid'].astype('str')
-    print(adata.obs['polairty'].dtype)
-    print(adata.obsm['other_features']['polairty'].dtype)
+    print(adata.obs['polarity'].dtype)
+    print(adata.obsm['other_features']['polarity'].dtype)
     print(adata.obs['batch'].dtype)
     adata.obs['nm_centroid'] = adata.obs['nm_centroid'].astype('str')
-    adata.obsm['other_features']['polairty'] = adata.obsm['other_features']['polairty'].astype('str')
+    adata.obsm['other_features']['polarity'] = adata.obsm['other_features']['polarity'].astype('str')
     adata.obsm['other_features']['centroid'] = adata.obsm['other_features']['centroid'].astype('str')
     adata.obs['cell_centroid'] = adata.obs['cell_centroid'].astype('str')
 
