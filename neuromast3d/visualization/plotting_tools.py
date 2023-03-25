@@ -10,7 +10,6 @@ from typing import Optional, Union
 
 from aicsimageio import AICSImage
 from aicsshparam import shtools
-import matplotlib
 from matplotlib import pyplot as plt
 from matplotlib.colors import ListedColormap
 import napari
@@ -387,12 +386,12 @@ def reconstruct_pc_meshes(adata, pca_model, alias: str, num_pcs: int, sd_bins: l
             reconstruct_mesh_from_shcoeffs_array(shcoeffs, adata.var_names, alias, 32, save_path)
     return
 
-
 def run_custom_pca(
     adata,
     alias: str,
     n_comps: Union[float, int],
     batches: Optional[list] = None,
+    zero_center: Optional[bool] = True,
     use_highly_variable: Optional[bool] = None,
 ):
     # Fit PCA to subset of data, apply transform to rest, then add to adata object
@@ -400,20 +399,19 @@ def run_custom_pca(
     if batches is not None:
         subset = adata[adata.obs['batch'].isin(batches)]
         df = subset.to_df()
-
     else:
         df = adata.to_df()
 
-    shcoeffs, _ = get_matrix_of_shcoeffs_for_pca(df, alias)
-    pca_ = PCA(n_components=n_comps)
+    shcoeffs, _ = plotting_tools.get_matrix_of_shcoeffs_for_pca(df, alias)
+    pca_ = PCA(n_components=n_comps, random_state=0)
     pca_.fit(shcoeffs)
-    axes = apply_pca_transform(adata.to_df(), pca_, alias=alias)
+    axes = plotting_tools.apply_pca_transform(adata.to_df(), pca_, alias=alias)
 
     X_pca = axes.values
     adata.obsm['X_pca'] = X_pca
     adata.uns['pca'] = {}
     adata.uns['pca']['params'] = {
-        'zero_center': True,
+        'zero_center': zero_center,
         'use_highly_variable': use_highly_variable,
     }
 
@@ -633,7 +631,7 @@ def view_repr_cells(adata, col_name, output_dir = None):
 
         viewer.add_labels(img_ch0, name=f'{cluster}_ch0', blending='additive', color=color_mapping)
         viewer.add_labels(img_ch1, name=f'{cluster}_ch1', blending='additive', color=color_mapping)
- 
+
         if output_dir is not None:
             save_path = Path(output_dir / 'repr_cells')
             save_path.mkdir(parents=True, exist_ok=True)
@@ -643,7 +641,6 @@ def view_repr_cells(adata, col_name, output_dir = None):
 
 
 def reconstruct_repr_cells_from_shcoeffs(adata, alias, output_dir):
-    # TODO: would be nice to save NUC too?
     for row in adata.uns['repr_cells'].itertuples():
         shcoeffs = adata.X[row.inds, :]
         save_dir = Path(output_dir / 'repr_cell_meshes')
@@ -654,7 +651,14 @@ def reconstruct_repr_cells_from_shcoeffs(adata, alias, output_dir):
 
         seg_path = adata.obsm['other_features']['crop_seg'][row.inds]
         reader = AICSImage(seg_path)
-        seg_img = reader.get_image_data('ZYX', C=1, S=0, T=0)
+
+        if alias == 'MEM':
+            ch = adata.obsm['other_features']['cell_seg'][row.inds]
+
+        elif alias == 'NUC':
+            ch = adata.obsm['other_features']['nuc_seg'][row.inds]
+
+        seg_img = reader.get_image_data('ZYX', C=ch, S=0, T=0)
 
         mesh, _, _ = shtools.get_mesh_from_image(seg_img)
         save_path = f'{save_dir}/{row.cluster}_{row.k}_original.vtk'
@@ -724,3 +728,10 @@ def reorder_clusters(df, by, clust_col, measure, ascending):
     num_clusts = max(cat_index)
     clust_categorical = pd.Categorical(clust_col_remapped, range(num_clusts + 1), ordered=True)
     return clust_categorical
+
+
+def calc_group_percents(df: pd.DataFrame, clust_col: Union[str, list], feat_col: str):
+    percents = df.groupby(clust_col)[feat_col].value_counts(normalize=True).to_frame()
+    percents = percents.rename({feat_col: 'percent'}, axis=1)
+    percents = percents.reset_index()
+    return percents
