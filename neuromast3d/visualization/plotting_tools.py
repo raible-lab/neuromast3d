@@ -327,7 +327,7 @@ def circular_hist(ax, x, bins=16, density=True, offset=0, gaps=True, **tick_kwar
 
     # Plot data on ax
     patches = ax.bar(bins[:-1], radius, zorder=1, align='edge', width=widths,
-                     edgecolor='darkgrey', fill=False, linewidth=1)
+                     edgecolor='black', fill=False, linewidth=1)
 
     # Set the direction of the zero angle
     ax.set_theta_offset(offset)
@@ -402,10 +402,10 @@ def run_custom_pca(
     else:
         df = adata.to_df()
 
-    shcoeffs, _ = plotting_tools.get_matrix_of_shcoeffs_for_pca(df, alias)
+    shcoeffs, _ = get_matrix_of_shcoeffs_for_pca(df, alias)
     pca_ = PCA(n_components=n_comps, random_state=0)
     pca_.fit(shcoeffs)
-    axes = plotting_tools.apply_pca_transform(adata.to_df(), pca_, alias=alias)
+    axes = apply_pca_transform(adata.to_df(), pca_, alias=alias)
 
     X_pca = axes.values
     adata.obsm['X_pca'] = X_pca
