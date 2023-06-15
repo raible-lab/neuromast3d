@@ -9,31 +9,42 @@ and does not try to align cells to an organismal axis (e.g. A/P, D/V).
 
 import ast
 import argparse
-import logging
-import os
+from functools import partial
+from locale import normalize
 import pathlib
 import sys
+from typing import Tuple, Union
 
 from aicsimageio import AICSImage
-from aicsimageio.writers import ome_tiff_writer
 from aicsimageprocessing import resize, resize_to
 import numpy as np
 import pandas as pd
-from scipy.stats import skew
 from skimage.morphology import binary_closing, ball
-from skimage.measure import regionprops
-from skimage.transform import rotate
-from scipy.ndimage import center_of_mass
+from sklearn.decomposition import PCA
+import scipy.ndimage as ndi
+import yaml
+from neuromast3d.prep_single_cells.prep_single_cells import apply_function_to_all_channels, inherit_labels
+from neuromast3d.prep_single_cells.utils import apply_3d_rotation, rotate_image_3d
 
+from neuromast3d.step_utils import read_raw_and_seg_img, check_dir_exists, step_logger, create_step_dir, save_raw_and_seg_cell
 from neuromast3d.alignment.utils import rotate_image_2d_custom
 
-logger = logging.getLogger(__name__)
+
+def normalize_centroid(
+    image: np.array,
+    origin: tuple
+):
+    if image.ndim != 3:
+        raise ValueError(f'Invalid shape of input image {image.shape}. \
+                Image must be a single-channel, 3D stack.')
+
+    centroid = ndi.center_of_mass(image)
+    centroid_normed = np.subtract(centroid, origin)
+    return centroid_normed
 
 
 def calculate_alignment_angle_2d(
-        image: np.array,
-        origin: tuple,
-        make_unique: bool = True
+        centroid_normed: tuple,
 ):
     """Calculate 2d alignment angle for a cell compared to a user-defined
     origin to use as the axis of rotation. The centroid of the image is
@@ -41,6 +52,7 @@ def calculate_alignment_angle_2d(
     describing the location of the cell centroid compared to the origin in
     the xy-plane. The rotation angle between this vector and the x-axis
     (3 o'clock position) is then calculated.
+
 
     Parameters
     ----------
@@ -59,8 +71,6 @@ def calculate_alignment_angle_2d(
         Default True.
 
     Returns
-    -------
-    Tuple[float, np.array]
         The angle for rotation and the image centroid after subtracting
         the defined origin. The sign of the angle can be positive or negative,
         depending on where the cell centroid was relative to the origin.
@@ -68,65 +78,136 @@ def calculate_alignment_angle_2d(
         negative angles should be rotated CCW.
 
     """
-
-    if image.ndim != 3:
-        raise ValueError(f'Invalid shape of input image {image.shape}. \
-                Image must be a single-channel, 3D stack.')
-
-    centroid = center_of_mass(image)
-    centroid_normed = np.subtract(centroid, origin)
     x = centroid_normed[2]
     y = -centroid_normed[1]
 
-    if make_unique:  # NOTE: modified from original in shparam!
+    # Calculate angle with atan2 to preserve orientation
+    # I think this SHOULD align to the 3 o' clock position?
+    angle = 180 * np.arctan2(y, x) / np.pi
 
-        # Calculate angle with atan2 to preserve orientation
-        # I think this SHOULD align to the 3 o' clock position?
-        angle = 180 * np.arctan2(y, x) / np.pi
+    return angle
 
+
+def apply_45_degree_correction(angle):
+    '''
+    if abs(angle) > 90:
+        raise ValueError(f'Angle must be between 90 and -90, actual angle is {angle}')
+    '''
+    if -45 <= angle <= 45:
+        pass
+    elif angle < -45:
+        angle = -(-90 - angle)
+    elif angle > 45:
+        angle = -(90 - angle)
+    return angle
+
+
+def calculate_2d_long_axis_angle_to_z_axis(seg_cell, proj_type: str, make_less_than_45: bool = False):
+    if seg_cell.ndim == 3:
+        seg_cell = seg_cell[np.newaxis, :, :, :]
+    elif seg_cell.ndim == 4:
+        seg_cell = seg_cell
     else:
-        # TODO: update or remove? Don't think this is right anymore
-        # Calculate smallest angle
-        angle = 0.0
-        if np.abs(centroid[2]) > 1e-12:  # avoid divide by zero error ig?
-            angle = 180 * np.arctan(centroid[1] / centroid[2]) / np.pi
+        raise ValueError('Seg cell ndims must be 3 or 4')
 
-    return angle, centroid
+    _, z, y, x = np.nonzero(seg_cell)
+    if proj_type == 'xz':
+        coords = np.hstack([x.reshape(-1, 1), z.reshape(-1, 1)])
+    elif proj_type == 'yz':
+        coords = np.hstack([y.reshape(-1, 1), z.reshape(-1, 1)])
+    pca = PCA(n_components=2)
+    pca = pca.fit(coords)
+    eigenvecs = pca.components_
+    angle = 180 * np.arctan(eigenvecs[0][0]/eigenvecs[0][1]) / np.pi
+
+    if make_less_than_45:
+        angle = apply_45_degree_correction(angle)
+    return angle
 
 
-if __name__ == '__main__':
-    # Command line arguments
-    parser = argparse.ArgumentParser(description='Basic cell alignment')
-    parser.add_argument('project_dir', help='project directory for this run')
-    parser.add_argument('manifest', help='path to cell manifest in csv format')
-    parser.add_argument(
-            '-c',
-            '--ch_index',
-            default=0,
-            type=int,
-            help='channel to use to calculate the rotation angle (default 0)'
+def align_cell_xz_long_axis_to_z_axis(raw_cell, seg_cell):
+    angle = calculate_2d_long_axis_angle_to_z_axis(seg_cell, 'xz')
+    seg_cell_aligned = ndi.rotate(seg_cell, -angle, axes=(1, 3), order=0)
+    raw_cell_aligned = ndi.rotate(raw_cell, -angle, axes=(1, 3), order=0)
+    return raw_cell_aligned, seg_cell_aligned
+
+
+def align_cell_yz_long_axis_to_z_axis(raw_cell, seg_cell):
+    angle = calculate_2d_long_axis_angle_to_z_axis(seg_cell, 'yz')
+    seg_cell_aligned = ndi.rotate(seg_cell, -angle, axes=(1, 2), order=0)
+    raw_cell_aligned = ndi.rotate(raw_cell, -angle, axes=(1, 2), order=0)
+    return raw_cell_aligned, seg_cell_aligned
+
+
+def create_fov_dataframe_from_cell_dataframe(cell_df):
+    fov_df = cell_df.copy()
+    fov_df.drop_duplicates(subset=['fov_id'], keep='first', inplace=True)
+    fov_df.drop(
+        ['crop_raw_pre_alignment', 'crop_seg_pre_alignment', 'roi'],
+        axis=1,
+        inplace=True
     )
-    parser.add_argument(
-            '-u',
-            '--make_unique',
-            help='make the rotation angle unique',
-            action='store_true'
+    # index of cell dataframe is usually CellId, which we don't need
+    fov_df = fov_df.reset_index(drop=True)
+    return fov_df
+
+
+def interpolate_fov_in_z(seg_img, pixel_size_xyz):
+    nm = seg_img > 0
+    xy_res, _, z_res = pixel_size_xyz
+    nm = resize(
+            seg_img,
+            (
+                z_res / xy_res,
+                xy_res / xy_res,
+                xy_res / xy_res
+            ),
+            method='bilinear'
     )
+    seg_img = resize_to(seg_img, nm.shape, method='nearest')
+    nm = binary_closing(nm, ball(5))
+    nm_centroid = ndi.center_of_mass(nm)
+    return seg_img, nm_centroid
 
-    # Parse args and assign to variables
-    args = parser.parse_args()
 
-    project_dir = args.project_dir
-    path_to_manifest = args.manifest
-    rot_ch_index = args.ch_index
+def get_alignment_settings(config) -> dict:
+    project_dir = pathlib.Path(config['project_dir'])
+    settings = {
+            'project_dir': project_dir,
+            'path_to_manifest': project_dir / 'prep_single_cells/cell_manifest.csv',
+            'rot_ch_index': config['alignment']['rot_ch_index'],
+            'make_unique': config['alignment']['make_unique'],
+            'mode': config['alignment']['mode'],
+            'use_channels': config['alignment']['use_channels'],
+            'continue_from_previous': config['alignment']['continue_from_previous'],
+            '45_corr_xz': config['alignment']['45_corr_xz'],
+            '45_corr_yz': config['alignment']['45_corr_yz']
+    }
+    return settings
 
-    # Check that project directory exists
-    if not os.path.isdir(project_dir):
-        print('Project directory does not exist')
-        sys.exit()
 
-    # Read the manifest to align cells for this run
-    cell_df = pd.read_csv(path_to_manifest, index_col=0)
+def prepare_fov(fov, settings, cell_df):
+    print('starting alignment for', fov.fov_id)
+    seg_reader = AICSImage(fov.fov_seg_path)
+
+    seg_img = seg_reader.get_image_data('ZYX', S=0, T=0, C=settings['rot_ch_index'])
+    pixel_size_xyz = ast.literal_eval(fov.pixel_size_xyz)
+
+    # Inherit labels from cell again (hopefully this doesn't cause memory issues)
+    mem_seg = seg_reader.get_image_data('ZYX', S=0, T=0, C=fov.cell_seg)
+    seg_img = inherit_labels(seg_img, mem_seg)
+    mem_seg = 0
+
+    seg_img, nm_centroid = interpolate_fov_in_z(seg_img, pixel_size_xyz)
+    fov_info = {'nm_centroid': nm_centroid, 'fov_id': fov.fov_id}
+
+    current_fov_cells = cell_df[cell_df['fov_id'] == fov.fov_id]
+
+    return current_fov_cells, fov_info, seg_img
+
+
+def prepare_cell_and_fov_datasets(settings, step_dir):
+    cell_df = pd.read_csv(settings['path_to_manifest'], index_col='CellId')
 
     # Since we are applying alignment, rename old crop_seg and crop_raw
     # Because we want to use the aligned images in future steps
@@ -136,136 +217,149 @@ if __name__ == '__main__':
         }
     )
 
-    # Create dir to save for this step
-    step_local_path = pathlib.Path(f'{project_dir}/alignment')
-    step_local_path.mkdir(parents=True, exist_ok=True)
+    if settings['continue_from_previous']:
+        # In the event a previous run was aborted, e.g. due to no disk space
+        # Recreate the cell_df as if we were mid run
+        done_fovs = pd.read_csv(step_dir / 'manifest.csv', index_col='CellId')
+        # Save old manifest in case I screwed up (can remove once I am sure it works properly)
+        done_fovs.to_csv(step_dir / 'old_manifest.csv')
+        not_done_fovs = cell_df[~cell_df['fov_id'].isin(done_fovs['fov_id_x'])]
+        cell_df = pd.concat([done_fovs, not_done_fovs])
+        fov_df = create_fov_dataframe_from_cell_dataframe(not_done_fovs)
 
-    # Save command line arguments to logfile for future reference
-    log_file_path = step_local_path / 'alignment.log'
-    logging.basicConfig(
-            filename=log_file_path,
-            level=logging.INFO,
-            format='%(asctime)s %(message)s'
-    )
+    else:
+        fov_df = create_fov_dataframe_from_cell_dataframe(cell_df)
+    
+    return cell_df, fov_df
+
+
+def align_cell_3d(seg_cell, cell_info, settings):
+    # Initialize angles at 0 because some methods only calculate 1-2 angles
+    mode = settings['mode']
+    use_channels = ast.literal_eval(settings['use_channels'])
+    centroid_normed = cell_info['cell_centroid_normed']
+    angle_1, angle_2, angle_3 = (0, 0, 0)
+
+    if mode == 'unaligned':
+        angle_1, angle_2, angle_3 = (0, 0, 0)
+
+    if mode in ('xy_only', 'xy_xz', 'xy_xz_yz'):
+        angle_1 = calculate_alignment_angle_2d(
+                centroid_normed=centroid_normed,
+        )
+        seg_cell_aligned = ndi.rotate(seg_cell, -angle_1, (2, 3), reshape=True, order=0)
+    
+    if mode in ('xy_xz', 'xy_xz_yz'):
+        angle_2 = calculate_2d_long_axis_angle_to_z_axis(
+            seg_cell_aligned[(use_channels), :, :, :],
+            'xz',
+            settings['45_corr_xz']
+        )
+        seg_cell_aligned = ndi.rotate(seg_cell_aligned, -angle_2, (1, 3), reshape=True, order=0)
+
+    if mode == 'xy_xz_yz':
+        angle_3 = calculate_2d_long_axis_angle_to_z_axis(
+            seg_cell_aligned[(use_channels), :, :, :],
+            'yz',
+            settings['45_corr_yz']
+        )
+        seg_cell_aligned = ndi.rotate(seg_cell_aligned, -angle_3, (1, 2), reshape=True, order=0)
+
+    if mode == 'principal_axes':
+        angle_1, angle_2, angle_3 = rotate_image_3d(
+            seg_cell[(use_channels), :, :, :]
+        )
+        seg_cell_aligned = apply_3d_rotation(seg_cell, angle_1, angle_2, angle_3)
+
+    return seg_cell_aligned, angle_1, angle_2, angle_3
+
+
+def execute_step(config):
+    step_name = 'alignment'
+    settings = get_alignment_settings(config)
+
+    check_dir_exists(settings['project_dir'])
+    step_dir = create_step_dir(settings['project_dir'], step_name)
+
+    logger = step_logger(step_name, step_dir)
     logger.info(sys.argv)
 
-    # Create fov dataframe
-    fov_df = cell_df.copy()
-    fov_df.drop_duplicates(subset=['fov_id'], keep='first', inplace=True)
-    fov_df.drop(
-        ['CellId', 'crop_raw_pre_alignment', 'crop_seg_pre_alignment', 'roi'],
-        axis=1,
-        inplace=True
-    )
+    cell_df, fov_df = prepare_cell_and_fov_datasets(settings, step_dir)
 
     # Calculate neuromast centroid and rotation angles
-    nm_centroids = []
     cell_angles = []
 
-    # Loop through and interpolate each neuromast (fov)
-    for fov in fov_df.itertuples(index=False):
-        seg_reader = AICSImage(fov.fov_seg_path)
+    for fov in fov_df.itertuples():
 
-        # TODO: For now, nm and cell centroid calculation will just use the
-        # membrane channel. But it could be useful to have an option
-        # to rotate about the centroid calculated from the nucleus channel.
-        seg_img = seg_reader.get_image_data('ZYX', S=0, T=0, C=rot_ch_index)
-        nm = seg_img > 0
-        pixel_size_xyz = ast.literal_eval(fov.pixel_size_xyz)
-        xy_res, _, z_res = pixel_size_xyz
-        print(xy_res, z_res)
-        nm = resize(
-                seg_img,
-                (
-                    z_res / xy_res,
-                    xy_res / xy_res,
-                    xy_res / xy_res
-                ),
-                method='bilinear'
-        )
-        seg_img = resize_to(seg_img, nm.shape, method='nearest')
-        nm = binary_closing(nm, ball(5))
-        nm_centroid = center_of_mass(nm)
+        current_fov_cells, fov_info, seg_img = prepare_fov(fov, settings, cell_df)
+        print('fov preparation complete')
 
-        # Save nm centroids matched to fov_id
-        nm_centroids.append({'fov_id': fov.fov_id, 'nm_centroid': nm_centroid})
+        for cell in current_fov_cells.itertuples():
+            # Initialize a dict in which to store cell info
+            cell_info = {}
+            cell_info['nm_centroid'] = fov_info['nm_centroid']
+            cell_info['fov_id'] = fov.fov_id
+            cell_info['CellId'] = cell.Index
+            print('Aligning', cell.Index)
 
-        # Subset cell df for this fov
-        current_fov_cells = cell_df[cell_df['fov_id'] == fov.fov_id]
-
-        for cell in current_fov_cells.itertuples(index=False):
-
-            # Actually we were never calculating the cell centroid based on
-            # the interpolated image... should we be? That would only throw off
-            # the z value I think? We'll try it here
             label = int(cell.label)
-            cell_img = np.where(seg_img == label, seg_img, 0)
 
-            # Calculate alignment angle in xy plane
+            cell_img = np.where(seg_img == label, 1, 0)
+
+            # Calculate alignment angles
             cell_img = cell_img.astype(np.uint8)
             cell_img = cell_img * 255
-            rotation_angle, cell_centroid = calculate_alignment_angle_2d(
-                    image=cell_img,
-                    origin=nm_centroid,
-                    make_unique=args.make_unique
-            )
+            cell_centroid = ndi.center_of_mass(cell_img)
+            cell_info['cell_centroid_normed'] = normalize_centroid(cell_img, cell_info['nm_centroid'])
 
-            # Apply alignment to single cell mask
-            reader = AICSImage(cell.crop_seg_pre_alignment)
-            seg_cell = reader.get_image_data('CZYX', S=0, T=0)
+            # Apply xy alignment to seg and raw crops
+            raw_cell, seg_cell = read_raw_and_seg_img(cell.crop_raw_pre_alignment, cell.crop_seg_pre_alignment)
 
-            # Rotate function expects multichannel image
-            if seg_cell.ndim == 3:
-                seg_cell = np.expand_dims(seg_cell, axis=0)
-            seg_cell_aligned = rotate_image_2d_custom(
-                    image=seg_cell,
-                    angle=rotation_angle,
-                    interpolation_order=0,
-                    flip_angle_sign=True
-            )
+            try:
+                seg_cell_aligned, angle_1, angle_2, angle_3 = align_cell_3d(seg_cell, cell_info, settings)
+                raw_cell_aligned = apply_3d_rotation(raw_cell, -angle_1, -angle_2, -angle_3)
+                cell_info['rotation_angle'] = angle_1
+                cell_info['rotation_angle_2'] = angle_2
+                cell_info['rotation_angle_3'] = angle_3
+                cell_info['centroid'] = cell_centroid
+            
+            except (MemoryError, ValueError) as e:
+                print(e)
+                logger.info('For cell %s of %s, encountered error: %s',
+                            label, fov.fov_id, e)
+                continue
 
-            # Also rotate raw image
-            reader = AICSImage(cell.crop_raw_pre_alignment)
-            raw_cell = reader.get_image_data('CZYX', S=0, T=0)
+            else:
+                current_cell_dir = f'{step_dir}/{fov.fov_id}/{label}'
+                raw_path, seg_path = save_raw_and_seg_cell(raw_cell_aligned, seg_cell_aligned, current_cell_dir)
 
-            if raw_cell.ndim == 3:
-                raw_cell = np.expand_dims(raw_cell, axis=0)
-            raw_cell_aligned = rotate_image_2d_custom(
-                    image=raw_cell,
-                    angle=rotation_angle,
-                    interpolation_order=0,
-                    flip_angle_sign=True
-            )
+                cell_info['crop_raw'] = raw_path
+                cell_info['crop_seg'] = seg_path
 
-            # Save aligned single cell mask and raw image
-            current_cell_dir = f'{step_local_path}/{fov.fov_id}/{label}'
-            pathlib.Path(current_cell_dir).mkdir(parents=True, exist_ok=True)
-            seg_path = f'{current_cell_dir}/segmentation.ome.tif'
-            crop_seg_aligned_path = pathlib.Path(seg_path)
-            writer = ome_tiff_writer.OmeTiffWriter(crop_seg_aligned_path)
-            writer.save(seg_cell_aligned, dimension_order='CZYX')
+                # Save angle matched to cell_id
+                # Also saves cell centroid and paths for rotated single cells
+                cell_angles.append({**cell_info})
 
-            raw_path = f'{current_cell_dir}/raw.ome.tif'
-            crop_raw_aligned_path = pathlib.Path(raw_path)
-            writer = ome_tiff_writer.OmeTiffWriter(crop_raw_aligned_path)
-            writer.save(raw_cell_aligned, dimension_order='CZYX')
+        # Save angles to cell manifest
+        angle_df = pd.DataFrame(cell_angles)
+        if settings['continue_from_previous']:
+            # columns exist but need to be filled for undone fovs
+            # bit of a hack but should be ok for now
+            # better solution would likely require a bigger rewrite...
+            new_cell_df = cell_df.fillna(angle_df)
+        else:
+            new_cell_df = cell_df.merge(angle_df, on='CellId')
+        new_cell_df.to_csv(f'{step_dir}/manifest.csv')
+        print('Manifest saved.')
 
-            # Save angle matched to cell_id
-            # Also saves cell centroid and paths for rotated single cells
-            cell_angles.append({
-                'CellId': cell.CellId,
-                'rotation_angle': rotation_angle,
-                'nm_centroid': nm_centroid,
-                'centroid': cell_centroid,
-                'crop_raw': raw_path,
-                'crop_seg': seg_path
-            })
 
-    # Add to cell_df
-    fov_centroid_df = pd.DataFrame(nm_centroids)
-    cell_df = cell_df.merge(fov_centroid_df, on='fov_id')
+def main():
+    parser = argparse.ArgumentParser(description='Basic cell alignment')
+    parser.add_argument('config', help='path to config file')
+    args = parser.parse_args()
+    config = yaml.load(open(args.config), Loader=yaml.Loader)
+    execute_step(config)
 
-    # Save angles to cell manifest
-    angle_df = pd.DataFrame(cell_angles)
-    cell_df = cell_df.merge(angle_df, on='CellId')
-    cell_df.to_csv(f'{step_local_path}/manifest.csv')
+
+if __name__ == '__main__':
+    main()

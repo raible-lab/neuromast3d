@@ -1,0 +1,81 @@
+# Channel indices for raw and seg images
+# Note: membrane in raw and cell_seg in seg are required
+# All others are optional and their names can be changed
+channels:
+        raw_channels:
+                nucleus: 0
+                membrane: 1
+
+
+        seg_channels:
+                nuc_seg: 0
+                cell_seg: 1
+
+
+# Directory in which to save results
+# Individual steps will create their own subdirs to save within this
+project_dir: '/home/maddy/projects/claudin_gfp_5dpf_DRAQ5_1h_airy_live_2/cvapipe_no_tg_run_3'
+
+# Directory containing raw images
+raw_dir: '/home/maddy/projects/claudin_gfp_5dpf_DRAQ5_1h_airy_live_2/stack_aligned'
+
+nucleus_segmentation:
+        # enable/disable nucleus segmentation step
+        state: False
+        # path to directory with nucleus mask predictions
+        nuc_pred_dir: '/home/maddy/projects/claudin_gfp_5dpf_DRAQ5_1h_airy_live_2/nuc_model_iter2_results_checkpoint_100/'
+        nuc_pred_threshold: 0.6
+        # parameters for distance transform watershed
+        sigma: 6
+        min_distance: 12
+        # whether to use boundary predictions for nucleus splitting
+        split_nuclei:
+                state: True
+                boundary_dir: '/home/maddy/projects/claudin_gfp_5dpf_DRAQ5_1h_airy_live_2/mem_model_3_results/'
+                mem_pred_threshold: 0.4
+                # set mode to automatic or interactive
+                mode: 'automatic'
+        output_dir: '/home/maddy/projects/claudin_gfp_5dpf_DRAQ5_1h_airy_live_2/nuc_labels_quick'
+
+membrane_segmentation:
+        # enable/disable membrane segmentation step
+        state: False
+        # path to nuclear labels
+        nuc_labels_dir: '/home/maddy/projects/claudin_gfp_5dpf_DRAQ5_1h_airy_live_2/nuc_labels_quick/edited_nuc_labels/'
+        # path to directory with membrane boundary predictions
+        mem_pred_dir: '/home/maddy/projects/claudin_gfp_5dpf_DRAQ5_1h_airy_live_2/mem_model_3_results/'
+        # desired output directory name (will be created if nonexistent)
+        output_dir: '/home/maddy/projects/claudin_gfp_5dpf_DRAQ5_1h_airy_live_2/mem_seg_quick'
+
+create_fov_dataset:
+        # enable/disable fov dataset creation
+        state: True
+        # directory with original .czi images to get pixel size
+        original_dir: '/home/maddy/projects/claudin_gfp_5dpf_DRAQ5_1h_airy_live_2/original'
+        # directory with segmented/label images
+        seg_dir: '/home/maddy/projects/claudin_gfp_5dpf_DRAQ5_1h_airy_live_2/mem_seg_quick_ver1'
+        # set autorotation and, if so, the strategy to use
+        autorotate: False
+
+prep_single_cells:
+        # enable/disable single cell dataset creation from fov dataset
+        state: True
+
+alignment:
+        # enable/disable alignment
+        state: True
+        # allow to continue from previous partially completed run
+        continue_from_previous: False
+        # channel in the seg img to use to calculate the radial rotation angle
+        rot_ch_index: 1
+        # whether to make the rotation unique
+        make_unique: True
+        # alignment method to use
+        # available modes: unaligned, xy_only, xy_xz, xy_xz_yz, principal_axes
+        # see README for details
+        mode: 'xy_xz_yz'
+        # channels to use to calculate tilt correction angle(s)
+        use_channels: '1'
+        # use >45 degree angle correction
+        45_corr_xz: False
+        45_corr_yz: True
