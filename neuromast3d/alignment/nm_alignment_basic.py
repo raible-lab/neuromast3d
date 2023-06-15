@@ -180,7 +180,8 @@ def get_alignment_settings(config) -> dict:
             'mode': config['alignment']['mode'],
             'use_channels': config['alignment']['use_channels'],
             'continue_from_previous': config['alignment']['continue_from_previous'],
-            '45_corr': config['alignment']['45_corr']
+            '45_corr_xz': config['alignment']['45_corr_xz'],
+            '45_corr_yz': config['alignment']['45_corr_yz']
     }
     return settings
 
@@ -252,7 +253,7 @@ def align_cell_3d(seg_cell, cell_info, settings):
         angle_2 = calculate_2d_long_axis_angle_to_z_axis(
             seg_cell_aligned[(use_channels), :, :, :],
             'xz',
-            False
+            settings['45_corr_xz']
         )
         seg_cell_aligned = ndi.rotate(seg_cell_aligned, -angle_2, (1, 3), reshape=True, order=0)
 
@@ -260,7 +261,7 @@ def align_cell_3d(seg_cell, cell_info, settings):
         angle_3 = calculate_2d_long_axis_angle_to_z_axis(
             seg_cell_aligned[(use_channels), :, :, :],
             'yz',
-            settings['45_corr']
+            settings['45_corr_yz']
         )
         seg_cell_aligned = ndi.rotate(seg_cell_aligned, -angle_3, (1, 2), reshape=True, order=0)
 
