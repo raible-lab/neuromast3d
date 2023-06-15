@@ -157,20 +157,19 @@ def drop_manually_curated_cells(cell_df, curated_df):
     cellids_to_exclude = list(cellids_to_exclude.values)
     cell_df_cleaned = cell_df.drop(cellids_to_exclude, axis=0, errors='ignore')
     num_rows_removed = cell_df.shape[0] - cell_df_cleaned.shape[0]
-    print(f'{num_rows_removed} cells removed')
+    logger.info(f'{num_rows_removed} cells removed')
     return cell_df_cleaned
 
 
-def add_hc_column(cell_df, curated_df):
+def get_hcs(cell_df, curated_df):
     curated_df = curated_df.copy()
     curated_df['hair_cells'] = curated_df['hair_cells'].apply(ast.literal_eval)
     curated_df = curated_df.explode('hair_cells')
     curated_df = curated_df.dropna(axis=0, subset=['hair_cells'])
     hc_ids = curated_df['fov_id'] + '_' + curated_df['hair_cells'].astype(str)
-    cell_df = cell_df.copy()
-    cell_df['hair_cell'] = False
-    cell_df.loc[hc_ids, 'hair_cell'] = True
-    return cell_df
+    hc_col = pd.Series(False, cell_df.index)
+    hc_col.loc[hc_ids] = True
+    return hc_col
 
 
 def get_genotypes_from_cellids(cell_df) -> list:
@@ -208,6 +207,20 @@ def get_list_of_intensity_features(alias: str):
         f'{alias}_intensity_max_lcc'
     ]
     return list_of_features
+
+
+def get_list_of_orient_features():
+    list_of_features = [
+        'z_dist',
+        'y_dist',
+        'x_dist',
+        'raw_xy_dist_from_center',
+        'normalized_xy_dist_from_center',
+        'rotation_angle',
+        'corrected_rotation_angle'
+    ]
+    return list_of_features
+
 
 # TODO: there is also rotation angle(s) and centroid position
 # will have to think about adding those, + any other engineered features
@@ -339,6 +352,9 @@ def circular_hist(ax, x, bins=16, density=True, offset=0, gaps=True, **tick_kwar
     # Set tick params if wanted
     ax.tick_params(**tick_kwargs)
 
+    # Put axis below hist
+    ax.set_axisbelow(True)
+
     return n, bins, patches
 
 
@@ -448,42 +464,6 @@ def get_cluster_percents_by_genotype(
     return cluster_percents
 
 
-def add_distances_to_dataframe(df):
-    df_merged = df.copy()
-    # Calculate cell centroid dist
-    df_merged['nm_centroid'] = df_merged['nm_centroid'].apply(ast.literal_eval)
-    df_merged['cell_centroid'] = df_merged['centroid'].apply(ast.literal_eval)
-
-    # Is this the true distance? Or do I need to square/square root it...
-    dist = df_merged['cell_centroid'].apply(np.array) - df_merged['nm_centroid'].apply(np.array)
-
-    # Separate 3 coordinates into separate columns
-    df_merged['z_dist'], df_merged['y_dist'], df_merged['x_dist'] = zip(*dist)
-
-    # Invert sign of y to convert from rc coords to xy coords'
-    df_merged['y_dist'] = -df_merged['y_dist']
-
-    # Drop z to only calculate xy dist
-    xy_dist = df_merged[['y_dist', 'x_dist']].values.tolist()
-    df_merged['raw_xy_dist_from_center'] = [np.linalg.norm(row) for row in xy_dist]
-
-    # Convert rotation angle to rads for plotting
-    df_merged['rotation_angle_in_rads'] = df_merged['rotation_angle']*np.pi/180
-
-    # Will need to check this is right later, just doing it quickly for now
-    # DV should be counterclockwise rotated by 90 degrees
-    df_merged['corrected_rotation_angle'] = df_merged['rotation_angle']
-    df_merged.loc[df_merged['polarity'] == 'DV', 'corrected_rotation_angle'] = df_merged['rotation_angle'] + 90
-
-    df_merged['corrected_rotation_angle_in_rads'] = df_merged['corrected_rotation_angle']*np.pi/180
-
-    # Normalize to centroid of cell furthest from the neuromast center
-    groups = df_merged.groupby(['fov_id'])
-    max_vals = groups.transform('max')
-    df_merged['normalized_xy_dist_from_center'] = df_merged['raw_xy_dist_from_center'] / max_vals['raw_xy_dist_from_center']
-    return df_merged
-
-
 def calculate_cell_positions(df):
     df_new = pd.DataFrame() 
     df_new['nm_centroid'] = df['nm_centroid'].apply(ast.literal_eval)
@@ -520,9 +500,8 @@ def convert_seaborn_cmap_to_mpl(sns_cmap):
     return mpl_cmap
 
 
-def plot_clusters_polar(df, col_name: str, cmap, **tick_kwargs):
+def plot_clusters_polar(df, col_name: str, cmap, axs, include_ns: bool = False, **plt_kwargs):
     clust_groups = df.groupby(col_name)
-    fig, axs = plt.subplots(ncols=len(clust_groups), figsize=(8, 1.5), subplot_kw={'projection': 'polar'}, sharey=True)
     for name, group in clust_groups:
         # this assumes clusters are integers from 0 to n clusters
         axs[name].plot(
@@ -530,9 +509,13 @@ def plot_clusters_polar(df, col_name: str, cmap, **tick_kwargs):
                 group['normalized_xy_dist_from_center'].values,
                 '.',
                 color=cmap(name),
-                markersize=2
+                **plt_kwargs
             )
-        axs[name].tick_params(**tick_kwargs)
+        axs[name].tick_params(labelbottom=False, labelleft=False)
+        axs[name].set_axisbelow(True)
+        if include_ns:
+            axs[name].text(0.5, -0.15, f'n = {len(group)}', horizontalalignment='center', transform=axs[name].transAxes)
+
     return axs
 
 
@@ -579,11 +562,8 @@ def plot_umap_from_adata(adata, ax=None, save_path: Union[str, Path, None] = Non
     UMAP_2 = adata.obsm['X_umap'][:, 1]
 
     g = sns.scatterplot(x=UMAP_1, y=UMAP_2, ax=ax, **sns_kwargs)
-    g.set_xlabel('UMAP 1')
-    g.set_ylabel('UMAP 2')
-
-    plt.legend(bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=0)
-    plt.tight_layout()
+    #g.set_xlabel('UMAP 1')
+    #g.set_ylabel('UMAP 2')
 
     if save_path is not None:
         plt.savefig(save_path, dpi=300)
@@ -652,11 +632,7 @@ def reconstruct_repr_cells_from_shcoeffs(adata, alias, output_dir):
         seg_path = adata.obsm['other_features']['crop_seg'][row.inds]
         reader = AICSImage(seg_path)
 
-        if alias == 'MEM':
-            ch = adata.obsm['other_features']['cell_seg'][row.inds]
-
-        elif alias == 'NUC':
-            ch = adata.obsm['other_features']['nuc_seg'][row.inds]
+        ch = get_channel_from_alias(adata, alias, row.inds)
 
         seg_img = reader.get_image_data('ZYX', C=ch, S=0, T=0)
 
@@ -668,14 +644,17 @@ def reconstruct_repr_cells_from_shcoeffs(adata, alias, output_dir):
 def get_intensity_cols_from_config(path_to_config):
     with open(path_to_config, 'r') as stream:
         params = yaml.safe_load(stream)
-    # some configs may not have "intensity" settings
-    raw_aliases = list(params['features']['intensity'].keys())
+        raw_aliases = list(params['features']['intensity'].keys())
+
     intensity_col_names = {}
     for alias in raw_aliases:
         for key, val in params['data'].items():
             if alias in val.values():
                 intensity_col_names[val['channel']] = alias
+
     return intensity_col_names
+
+
 
 
 def plot_intensity_umap(adata, ch_name, int_col):
@@ -709,7 +688,7 @@ def classify_rec_error(adata, project_dirs, alias):
 
     adata.obsm['rec_error'] = rec_errors
     # Consider moving this to the error analysis script
-    gm_model = GaussianMixture(n_components=2, covariance_type='tied')
+    gm_model = GaussianMixture(n_components=2, covariance_type='tied', random_state=0)
     gm_model.fit(rec_errors['max_hd'].values.reshape(-1, 1))
     adata.obsm['rec_error']['gmm_classes'] = gm_model.predict(rec_errors['max_hd'].values.reshape(-1, 1))
     return adata
@@ -735,3 +714,113 @@ def calc_group_percents(df: pd.DataFrame, clust_col: Union[str, list], feat_col:
     percents = percents.rename({feat_col: 'percent'}, axis=1)
     percents = percents.reset_index()
     return percents
+
+
+def plot_heatmap_with_int_feats(adata, vars_to_corr, int_name: str, save_path: Optional[str] = None):
+    data = adata.obs[adata.obs.columns.intersection(vars_to_corr)]
+    int_feats = get_list_of_intensity_features(adata.uns['intensity_cols'][int_name])
+    int_data = adata.obsm['other_features'][adata.obsm['other_features'].columns.intersection(int_feats)]
+    data = pd.concat([data, int_data], axis=1)
+
+    # mask to make triangular
+    mask = np.triu(np.ones_like(data.corr(), dtype=bool))
+
+    plt.figure(figsize=(20, 10))
+    heatmap = sns.heatmap(data.corr(), mask=mask, vmin=-1, vmax=1, annot=True, cmap='RdBu')
+    heatmap.set_title('Correlation Heatmap', fontdict={'fontsize':12}, pad=12)
+
+    plt.tight_layout()
+
+    if save_path is not None:
+        plt.savefig(save_path)
+    
+    return heatmap
+
+
+def get_transgenes(adata) -> pd.Series:
+    int_chs = list(adata.uns['intensity_cols'].keys())
+    subset = adata.obsm['other_features'][int_chs]
+    subset = subset.where(subset != 1.0, subset.columns.to_series(), axis=1)
+    combined = pd.Series(np.NaN, subset.index)
+    for ch in int_chs:
+        combined = combined.fillna(subset[ch])
+    return combined
+
+
+def get_channel_from_alias(adata, alias, index):
+    if alias == 'MEM':
+        ch = adata.obsm['other_features']['cell_seg'][index]
+
+    elif alias == 'NUC':
+        ch = adata.obsm['other_features']['nuc_seg'][index]
+
+    return ch
+
+
+def get_random_cell_meshes(
+        adata,
+        alias,
+        num_cells: int,
+        seed: int,
+        save_dir: Optional[Path] = None
+    ):
+    rng = np.random.default_rng(seed)
+    sample_cells = rng.choice(adata.obs_names, num_cells)
+
+
+    for cell in sample_cells:
+
+        if save_dir is not None:
+            save_dir.mkdir(parents=True, exist_ok=True)
+            rec_save_path = f'{save_dir}/{cell}_rec.vtk'
+            orig_save_path = f'{save_dir}/{cell}_orig.vtk'
+
+        else:
+            rec_save_path = None
+            orig_save_path = None
+
+        _, mesh, _ = reconstruct_mesh_from_shcoeffs_array(
+                np.array(adata[cell].X).reshape(-1, 1),
+                adata.var_names,
+                alias,
+                32,
+                rec_save_path
+        )
+ 
+        seg_path = adata.obsm['other_features']['crop_seg'][cell]
+        reader = AICSImage(seg_path)
+        ch = get_channel_from_alias(adata, alias, cell)
+        seg_img = reader.get_image_data('ZYX', C=ch, S=0, T=0)
+        mesh, _, _ = shtools.get_mesh_from_image(seg_img)
+        shtools.save_polydata(mesh, orig_save_path)
+
+        rec_error = adata[cell].obsm['rec_error']['max_hd']
+
+    return rec_error
+
+
+def convert_basic_feats_to_mic(adata):
+    basic_feats = get_list_of_basic_features()
+    feat_data = adata.obsm['other_features'][basic_feats]
+
+    #use a series b/c can't assume all cells have same pixel size
+    pix_sizes = adata.obsm['other_features']['pixel_size_xyz'].apply(ast.literal_eval)
+    pix_to_mic_factor = pix_sizes.str[0]*10**6
+    converted_feats = pd.DataFrame(index=adata.obs_names)
+
+    for feat in basic_feats:
+        if 'volume' in feat:
+            converted_feats[feat] = feat_data[feat] * pix_to_mic_factor**3
+        elif 'area' in feat:
+            converted_feats[feat] = feat_data[feat] * pix_to_mic_factor**2
+        else:
+            converted_feats[feat] = feat_data[feat]
+
+    return converted_feats
+
+
+
+
+
+
+
