@@ -77,7 +77,9 @@ def main():
     # Automatically combine experiments
     feat_data = plotting_tools.combine_features_datasets(ls_dirs)
     curated_feat_data = pd.concat([pd.read_csv(file) for file in curation_files])
-    feat_data = plotting_tools.add_hc_column(feat_data, curated_feat_data)
+
+    # HC col must be added before excluding cells (b/c they can overlap)
+    feat_data['hair_cell'] = plotting_tools.get_hcs(feat_data, curated_feat_data)
     feat_data = plotting_tools.drop_manually_curated_cells(feat_data, curated_feat_data)
     feat_data['CellId'] = feat_data.index
 
@@ -86,107 +88,48 @@ def main():
     feat_data = feat_data.rename({'fov_id_x': 'fov_id'}, axis=1)
     feat_data = feat_data.merge(curated_feat_data, on='fov_id', how='left')
     feat_data = feat_data.set_index('CellId')
+
+    # Remove cells based on size
     feat_data = feat_data.drop(feat_data.loc[feat_data['MEM_shape_volume'] < 400000].index)
+    feat_data = feat_data.drop(feat_data.loc[feat_data['MEM_shape_volume'] > 3500000].index)
 
     # Spherical harmonics coeffs are a standin for gene expression here
     matrix_of_shcoeffs, feature_names = plotting_tools.get_matrix_of_shcoeffs_for_pca(feat_data, alias=alias)
     adata = ad.AnnData(matrix_of_shcoeffs)
     adata.obs_names = feat_data.index
     adata.var_names = feature_names
+    print('adata size', adata.X.shape)
+    print('df size', feat_data.shape)
     adata.obs['genotype'] = plotting_tools.get_genotypes_from_cellids(feat_data)
+    adata.obs['hair_cell'] = feat_data['hair_cell']
 
     if classify_rec_error:
         logger.info('classifying cells by rec error')
         adata = plotting_tools.classify_rec_error(adata, ls_dirs, alias)
-        sns.kdeplot(adata.obsm['rec_error'], x='max_hd', hue='gmm_classes')
-        plt.tight_layout()
-        plt.savefig(output_dir / 'rec_error_gmm_split.png')
 
     adata.obs['batch'] = feat_data['batch']
-    adata, pca, axes = plotting_tools.run_custom_pca(adata, alias, 0.90, pca_batches)
-    logger.info(f'PCA done on batches {pca_batches}')
 
-    num_pcs = len(axes.columns)
-    logger.info(f'Number of PCs is: {num_pcs}')
-
-    # Cluster, find neighbors, and UMAP embedding
-    external.tl.phenograph(adata, clustering_algo='leiden', k=30, resolution_parameter=resolution, seed=42)
-    pp.neighbors(adata, metric='minkowski', n_neighbors=30, n_pcs=num_pcs, random_state=42)
-
-    # Generate PCA plot
-    fig, ax = plt.subplots(nrows=1, ncols=2, figsize=(14, 7))
-    plotting_tools.plot_pca_var_explained(adata, ax, output_dir / 'pca_var_explained.png')
-
-    # UMAP embedding
-    fig, ax = plt.subplots(figsize=(8, 6))
-    tl.umap(adata, random_state=42)
-    pl.umap(adata, color='pheno_leiden', ax=ax, save='.svg', show=False)
-
-    # Rearrange clusters by distance from neuromast center
+    # TODO: do we still need this part? I think so...
     adata.obsm['other_features'] = feat_data[feat_data.columns.difference(feature_names)]
     cell_positions = plotting_tools.calculate_cell_positions(adata.obsm['other_features'])
     adata.obs = pd.concat([adata.obs, cell_positions], axis=1)
 
-    adata.obs['pheno_leiden_sorted'] = plotting_tools.reorder_clusters(
-        adata.obs,
-        'normalized_xy_dist_from_center',
-        'pheno_leiden',
-        'median',
-        False
-    )
-
-    fig, ax = plt.subplots(figsize=(8, 6))
-    tl.umap(adata, random_state=42)
-    pl.umap(adata, color='pheno_leiden_sorted', ax=ax, save='.svg', show=False)
-
-    # PAGA trajectory analysis
-    tl.paga(adata, groups='pheno_leiden_sorted')
-    fig, ax = plt.subplots(figsize=(7, 6))
-    pl.paga(adata, threshold=0.2, ax=ax, title='PAGA trajectory analysis', color='pheno_leiden_sorted', save='_thresh0.2.svg', show=False)
-
-    fig, ax = plt.subplots(figsize=(8, 6))
-    tl.umap(adata, init_pos='paga')
-    pl.umap(adata, color='pheno_leiden_sorted', save='_init_pos_paga.svg', ax=ax, show=False)
-
-    plotting_tools.reconstruct_pc_meshes(adata, pca, alias, 8, [-1, -0.5, 0, 0.5, 1], output_dir)
-
-    # Find representative cells
-    finder = RepresentativeCellFinder(adata.obsm['X_pca'])
-    clust_centroids = finder.find_cluster_centroids(adata.obs['pheno_leiden_sorted'].values)
-    repr_cells = finder.find_cells_near_all_cluster_centroids(1)
-    repr_cells_df = pd.DataFrame(repr_cells)
-    adata.uns['repr_cells'] = repr_cells_df
-
-    fig, ax = plt.subplots(figsize=(8, 6))
-    plotting_tools.plot_repr_cells_umap(adata, ax, output_dir / 'repr_cells_umap.png', hue=adata.obs['pheno_leiden_sorted'])
-
-    viewer = plotting_tools.view_repr_cells(adata, 'pheno_leiden_sorted', output_dir)
-    napari.run()
-
-    plotting_tools.reconstruct_repr_cells_from_shcoeffs(adata, alias, output_dir)
-
-    if len(project_dirs) > 1:
-        # Multiple batches, plot comparison
-        fig, ax = plt.subplots(figsize=(8, 6))
-        plotting_tools.plot_umap_from_adata(adata, ax, output_dir / 'batch_umap.png', hue=adata.obs['batch'], palette='deep')
-
-    # Polar plots of cell locations
-    mpl_deep = plotting_tools.convert_seaborn_cmap_to_mpl('deep')
-    #adata.obsm['other_features']['pheno_leiden_sorted'] = adata.obs['pheno_leiden_sorted']
-    plotting_tools.plot_clusters_polar(adata.obs, 'pheno_leiden_sorted', mpl_deep)
-    plt.savefig(output_dir / 'polar_plots_normalized.png')
-
     # Analyze intensity based stuff
     intensity_cols = {}
     for ls_dir in ls_dirs:
-        path_to_config = ls_dir / 'computefeatures/parameters.yaml'
-        intensity_cols.update(
-            plotting_tools.get_intensity_cols_from_config(path_to_config)
-        )
+        try:
+            path_to_config = ls_dir / 'computefeatures/parameters.yaml'
+            intensity_cols.update(
+                plotting_tools.get_intensity_cols_from_config(path_to_config)
+            )
+        except KeyError as e:
+            logger.info(e)
+            logger.info(f'No intensity channel in {path_to_config}')
 
     adata.uns['intensity_cols'] = intensity_cols
+    adata.obs['transgene'] = plotting_tools.get_transgenes(adata)
 
-    # Calculate intensity z-scores and make intensity plots
+    # Calculate intensity z-scores
     for ch_name, name in intensity_cols.items():
         col_name = f'{name}_intensity_mean_lcc'
         adata.obs[f'{col_name}'] = adata.obsm['other_features'][col_name]
@@ -196,16 +139,10 @@ def main():
         # If not from an experiment with that label, remain NaN
         binarized[adata.obs[f'{col_name}_z_score'].isnull()] = np.NaN
         adata.obs[f'{ch_name}_positive'] = binarized.astype(float)
-        sc.pl.umap(adata, color=f'{ch_name}_positive', save=f'{ch_name}_umap.png', show=False)
-        sc.pl.umap(adata, color=f'{col_name}_z_score', save=f'{ch_name}_z_score.png', show=False)
-
 
     # Fix columns that prevent saving
-    adata.obsp['pheno_jaccard_ig'] = adata.obsp['pheno_jaccard_ig'].tocsr()
+    #adata.obsp['pheno_jaccard_ig'] = adata.obsp['pheno_jaccard_ig'].tocsr()
     #adata.obsm['other_features']['nm_centroid'] = adata.obsm['other_features']['nm_centroid'].astype('str')
-    print(adata.obs['polarity'].dtype)
-    print(adata.obsm['other_features']['polarity'].dtype)
-    print(adata.obs['batch'].dtype)
     adata.obs['nm_centroid'] = adata.obs['nm_centroid'].astype('str')
     adata.obsm['other_features']['polarity'] = adata.obsm['other_features']['polarity'].astype('str')
     adata.obsm['other_features']['centroid'] = adata.obsm['other_features']['centroid'].astype('str')
@@ -215,7 +152,6 @@ def main():
     adata.obsm['other_features']['cells_to_exclude'] = adata.obsm['other_features']['cells_to_exclude'].astype('str')
 
     adata.write(output_dir / 'adata.h5ad')
-    plt.show()
 
 
 if __name__ == '__main__':
