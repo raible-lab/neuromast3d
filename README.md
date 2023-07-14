@@ -39,9 +39,11 @@ a few unit tests (implemented using pytest) are available in the tests
 directory.
 
 ## How to use this code
-Currently, the code can be run as a workflow (using the provided config.yaml file),
-or as a series of individual steps.
-The order of the pipeline goes like so:
+Currently, the code can be run as a workflow (by editing the config.yaml file
+and executing the command `run_neuromast3d config.yaml` from the `neuromast3d` 
+directory),or as a series of individual steps.
+
+The order of the pipeline is:
  - segmentation (optional, broken into "nucleus" and "cell" steps)
  - create_fov_dataset
  - prep_single_cells
