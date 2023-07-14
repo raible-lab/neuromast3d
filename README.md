@@ -130,7 +130,7 @@ that are not needed for analysis, such as “preview” channels on an AiryScan 
 using [pystackreg](https://github.com/glichtner/pystackreg/tree/master)
 
 
-# Installation
+## Installation
 1. Clone the `neuromast3d` repository to your local machine using the `git 
 clone` command.
 2. Create a conda environment with python 3.8 installed by running the command 
