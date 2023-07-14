@@ -80,11 +80,11 @@ on variation due to shape rather than rotation. The module for the alignment
 step is called nm_alignment_basic. The alignment method is set using the 
 'mode' parameter in the YAML file. The following modes are available:
 
-    1. unaligned: sets all alignment angles to 0 - i.e. the image is not aligned at all
-    2. xy_only: the cell is rotated around the z-axis so that the vector pointing from the cell centroid to the neuromast centroid is aligned with the x-axis (3 o'clock position)
-    3. xy_xz: the xy_only rotation, plus a rotation around the y-axis such that the principal axis of a 2D xz projection of the image aligns with the z-axis
-    4. xy_xz_yz: the xy_xz rotations, plus a rotation around the x-axis such that the princiapl axis of a 2D yz projection of the image aligns with the z-axis
-    5. principal_axes: the image is rotated so that the three major axes of the image (calculated by PCA) lie along the x, y, and z axes
+1. unaligned: sets all alignment angles to 0 - i.e. the image is not aligned at all
+2. xy_only: the cell is rotated around the z-axis so that the vector pointing from the cell centroid to the neuromast centroid is aligned with the x-axis (3 o'clock position)
+3. xy_xz: the xy_only rotation, plus a rotation around the y-axis such that the principal axis of a 2D xz projection of the image aligns with the z-axis
+4. xy_xz_yz: the xy_xz rotations, plus a rotation around the x-axis such that the princiapl axis of a 2D yz projection of the image aligns with the z-axis
+5. principal_axes: the image is rotated so that the three major axes of the image (calculated by PCA) lie along the x, y, and z axes
 
 This step is optional, since you could opt not to align your cells, use your 
 own alignment method, or use the default method of alignment in 
@@ -99,17 +99,17 @@ is intended to be run after the preprocessing pipeline (segmentation,
 preparation of the single cell dataset, and alignment) and necessary 
 cvapipe_analysis steps (loaddata and compute features) have been run. 
 Visualization modules include:
-    - curate_fov: A script used to open the field of view (fov) raw and segmented images for an experiment and pick labels to be excluded (such as poorly segmented cells). Includes an option to indicate the neuromast polarity relative to the body axis (AP or DV). Information is saved as a CSV file. Implemented using napari and magicgui. 
-    - rec_error: A script that can automatically calculate error metrics (such as Hausdorff distance) for the original and reconstructed meshes for an experiment. Results are saved in a CSV file.
-    - analysis: A script that takes the outputs from proceeding steps and organizes them in an AnnData object (Virshup et al. 2021), which is then saved. Can exclude manually annoted cells by providing output from curate_fov.
-    - plotting_tools: Module with a variety of functions used for data analysis and plotting.
-    - visualization: A script that allows the user to display data in UMAP space and pick points to open the corresponding single cell images. Useful for exploratory data analysis.
+ - curate_fov: A script used to open the field of view (fov) raw and segmented images for an experiment and pick labels to be excluded (such as poorly segmented cells). Includes an option to indicate the neuromast polarity relative to the body axis (AP or DV). Information is saved as a CSV file. Implemented using napari and magicgui. 
+ - rec_error: A script that can automatically calculate error metrics (such as Hausdorff distance) for the original and reconstructed meshes for an experiment. Results are saved in a CSV file.
+ - analysis: A script that takes the outputs from proceeding steps and organizes them in an AnnData object (Virshup et al. 2021), which is then saved. Can exclude manually annoted cells by providing output from curate_fov.
+ - plotting_tools: Module with a variety of functions used for data analysis and plotting.
+ - visualization: A script that allows the user to display data in UMAP space and pick points to open the corresponding single cell images. Useful for exploratory data analysis.
 
 ## misc
 Other modules include:
-    - find_closest_cells: Contains a class called “RepresentativeCellFinder,” which inherits from scipy.spatial.KDTree. Used to find representative cells (i.e. the cells closest to cluster centroids in multidimensional space).
-    - split_channels: A simple script used to automatically remove channels from an image that are not needed for analysis, such as “preview” channels on an AiryScan image.
-    - stackreg_script: A script that can be used to efficiently register images in batches using the pystackreg package (the Python port of the FIJI plugin StackReg).
+ - find_closest_cells: Contains a class called “RepresentativeCellFinder,” which inherits from scipy.spatial.KDTree. Used to find representative cells (i.e. the cells closest to cluster centroids in multidimensional space).
+ - split_channels: A simple script used to automatically remove channels from an image that are not needed for analysis, such as “preview” channels on an AiryScan image.
+ - stackreg_script: A script that can be used to efficiently register images in batches using the pystackreg package (the Python port of the FIJI plugin StackReg).
 
 
 # Installation
