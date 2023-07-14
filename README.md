@@ -55,9 +55,11 @@ Each of these steps is summarized below.
 
 ## segmentation
 Generate cell and nuclear instance segmentation using the watershed algorithm, 
-and clean up the results in napari. Note: this step is optional - you can use 
-your own method of choice to generate the cell and nuclear instance 
-segmentations, although there are some restrictions on file type.
+and clean up the results in napari. 
+
+Note: this step is optional - you can use your own method of choice to generate 
+the cell and nuclear instance segmentations, although there are some restrictions 
+on file type.
 
 ## create_fov_dataset
 This step takes directories containing raw and segmented images of the entire
